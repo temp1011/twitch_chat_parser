@@ -5,12 +5,7 @@ use irc::error::IrcError;
 use irc::proto::message::Tag;
 
 fn main() -> Result<(), IrcError> {
-    let config = Config {
-        nickname: Some("justinfan123123".to_owned()),
-        server: Some("irc.chat.twitch.tv".to_owned()),
-        channels: Some(vec!["#ninja".to_owned()]),
-        ..Config::default()
-    };
+    let config = Config::load("config.toml")?;
 
     let mut reactor = IrcReactor::new().unwrap();
     let client = setup_client(config, &mut reactor)?;
