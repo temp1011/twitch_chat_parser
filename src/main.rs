@@ -1,22 +1,19 @@
 extern crate irc;
 
 use irc::client::prelude::*;
+use irc::error::IrcError;
 use irc::proto::message::Tag;
 
-fn main() {
+fn main() -> Result<(), IrcError> {
     let config = Config {
         nickname: Some("justinfan123123".to_owned()),
         server: Some("irc.chat.twitch.tv".to_owned()),
-        channels: Some(vec!["#summit1g".to_owned()]),
+        channels: Some(vec!["#ninja".to_owned()]),
         ..Config::default()
     };
 
     let mut reactor = IrcReactor::new().unwrap();
-    let client = reactor.prepare_client_and_connect(&config).unwrap();
-    client
-        .send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])
-        .unwrap();
-    client.identify().unwrap();
+    let client = setup_client(config, &mut reactor)?;
 
     reactor.register_client_with_handler(client, |client, message| {
         match message.command {
@@ -27,7 +24,7 @@ fn main() {
                 };
                 println!("{}, {}, {:?}", msg, target, tags);
             }
-            Command::PING(target, msg) => {
+            Command::PING(_, msg) => {
                 client.send_pong(msg.unwrap_or(String::from("")))?;
             }
             Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
@@ -36,7 +33,14 @@ fn main() {
         Ok(())
     });
 
-    reactor.run();
+    reactor.run()
+}
+
+fn setup_client(config: Config, reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
+    let client = reactor.prepare_client_and_connect(&config)?;
+    client.send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])?;
+    client.identify()?;
+    Ok(client)
 }
 
 //probably should be json or something fancy
