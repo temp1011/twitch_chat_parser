@@ -8,6 +8,7 @@ edition = "2018"
 irc = "0.13.6"
 serde="1.0.90"
 serde_derive="1.0.90"
+serde_json="1.0.39"
 
 [profile.release]
 lto=true
