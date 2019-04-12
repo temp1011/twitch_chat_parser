@@ -25,7 +25,7 @@ fn main() -> Result<(), IrcError> {
                 println!("{}, {}, {:?}", msg, target, tags);
             }
             Command::PING(_, msg) => {
-                client.send_pong(msg.unwrap_or(String::from("")))?;
+                client.send_pong(msg.unwrap_or_else(|| String::from("")))?;
             }
             Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
             _ => {} //dbg!(message.command)
@@ -48,7 +48,7 @@ fn format_tags(tags: Vec<Tag>) -> Vec<String> {
     tags.into_iter()
         .map(|t| {
             let mut s1 = t.0;
-            let s2 = t.1.unwrap_or(String::from(""));
+            let s2 = t.1.unwrap_or_else(|| String::from(""));
             s1.push_str("=");
             s1.push_str(&s2);
             s1
