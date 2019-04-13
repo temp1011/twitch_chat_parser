@@ -9,6 +9,7 @@ irc = "0.13.6"
 serde="1.0.90"
 serde_derive="1.0.90"
 serde_json="1.0.39"
+serde_with_macros = "1.0.1"
 
 [profile.release]
 lto=true
