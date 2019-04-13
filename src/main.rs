@@ -30,6 +30,14 @@ struct TwitchTags {
     user_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct TwitchMessage {
+    tags: TwitchTags,
+    channel: String,
+    message: String,
+    raw: String,
+}
+
 fn map_to_int(s: String) -> u64 {
     s.parse::<u64>().unwrap_or(0)
 }
@@ -56,14 +64,9 @@ fn get_tags_struct(tags: Vec<Tag>) -> TwitchTags {
     ret
 }
 
-fn twitchtags_to_json(t: TwitchTags) -> Result<String, Box<Error>> {
-    let s = serde_json::to_string(&t)?;
-    Ok(s)
-}
-
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
-//too
+//too. The error handlnig here is probably too lax anyway.
 fn main() -> Result<(), IrcError> {
     let config = Config::load("config.toml")?;
 
@@ -73,14 +76,26 @@ fn main() -> Result<(), IrcError> {
     reactor.register_client_with_handler(client, |client, message| {
         match message.command {
             Command::PRIVMSG(ref target, ref msg) => {
-                let tags = match message.tags {
-                    Some(t) => twitchtags_to_json(get_tags_struct(t)).unwrap(),
+                let orig = message.to_string();
+
+                let tgs = match message.tags {
+                    Some(t) => get_tags_struct(t),
                     _ => Default::default(),
                 };
-                println!("{}, {}, {}", msg, target, tags);
+
+                let t_msg = TwitchMessage {
+                    tags: tgs,
+                    channel: target.to_string(),
+                    message: msg.to_string(),
+                    raw: orig,
+                };
+                match serde_json::to_string(&t_msg) {
+                    Ok(v) => println!("{}", v),
+                    Err(e) => println!("error serializing message {:?}, {:?}", t_msg, e),
+                }
             }
             Command::PING(_, msg) => {
-                client.send_pong(msg.unwrap_or_else(|| String::from("")))?;
+                client.send_pong(msg.unwrap_or_else(String::new))?;
             }
             Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
             _ => {} //dbg!(message.command)
