@@ -10,8 +10,6 @@ use irc::proto::message::Tag;
 use serde_derive::{Deserialize, Serialize};
 use serde_with_macros::skip_serializing_none;
 
-use std::error::Error;
-
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[skip_serializing_none]
@@ -97,8 +95,8 @@ fn main() -> Result<(), IrcError> {
             Command::PING(_, msg) => {
                 client.send_pong(msg.unwrap_or_else(String::new))?;
             }
-            Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
-            _ => {} //dbg!(message.command)
+            //Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
+            _ => {}
         }
         Ok(())
     });
