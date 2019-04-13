@@ -1046,7 +1046,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "twitch-collect-rust"
+name = "twitch_chat_parser"
 version = "0.1.0"
 dependencies = [
  "irc 0.13.6 (registry+https://github.com/rust-lang/crates.io-index)",

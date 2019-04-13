@@ -1,5 +1,5 @@
 [package]
-name = "twitch-collect-rust"
+name = "twitch_chat_parser"
 version = "0.1.0"
 authors = ["temp1011 <temp1011github@gmail.com>"]
 edition = "2018"
