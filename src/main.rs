@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate irc;
 extern crate serde_derive;
 extern crate serde_json;
@@ -15,6 +16,9 @@ use std::thread;
 
 use std::io::{Error, ErrorKind};
 
+use chrono::prelude::{DateTime, Utc};
+use chrono::TimeZone;
+
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[skip_serializing_none]
@@ -29,7 +33,9 @@ struct TwitchTags {
     id: Option<String>,
     moderator: Option<bool>,
     room_id: Option<u64>,
-    tmi_sent_ts: Option<u64>, //safe for 2038 problem
+
+    //#[serde(with = "ts_milliseconds")] possible with custom deserializer
+    tmi_sent_ts: Option<DateTime<Utc>>,
     user_id: Option<String>,
 }
 
@@ -59,7 +65,11 @@ fn get_tags_struct(tags: Vec<Tag>) -> TwitchTags {
             "id" => ret.id = val,
             "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
             "room-id" => ret.room_id = val.map(map_to_int),
-            "tmi-sent-ts" => ret.tmi_sent_ts = val.map(map_to_int),
+            "tmi-sent-ts" => {
+                ret.tmi_sent_ts = val
+                    .map(map_to_int)
+                    .map(|v| Utc.timestamp((v / 1000) as i64, ((v % 1000) * 1_000_000) as u32))
+            }
             "user-id" => ret.user_id = val,
             _ => {}
         }
