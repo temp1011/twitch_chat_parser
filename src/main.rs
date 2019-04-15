@@ -10,6 +10,11 @@ use irc::proto::message::Tag;
 use serde_derive::{Deserialize, Serialize};
 use serde_with_macros::skip_serializing_none;
 
+use std::sync::mpsc::channel;
+use std::thread;
+
+use std::io::{Error, ErrorKind};
+
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[skip_serializing_none]
@@ -71,7 +76,15 @@ fn main() -> Result<(), IrcError> {
     let mut reactor = IrcReactor::new()?;
     let client = setup_client(config, &mut reactor)?;
 
-    reactor.register_client_with_handler(client, |client, message| {
+    let (tx, rx) = channel::<TwitchMessage>();
+
+    let thread = thread::spawn(move || {
+        while let Ok(v) = rx.recv() {
+            println!("{}", serde_json::to_string(&v).unwrap());
+        }
+    });
+
+    reactor.register_client_with_handler(client, move |client, message| {
         match message.command {
             Command::PRIVMSG(ref target, ref msg) => {
                 let orig = message.to_string();
@@ -87,9 +100,8 @@ fn main() -> Result<(), IrcError> {
                     message: msg.to_string(),
                     raw: orig,
                 };
-                match serde_json::to_string(&t_msg) {
-                    Ok(v) => println!("{}", v),
-                    Err(e) => println!("error serializing message {:?}, {:?}", t_msg, e),
+                if let Err(e) = tx.clone().send(t_msg) {
+                    Error::new(ErrorKind::Other, e);
                 }
             }
             Command::PING(_, msg) => {
@@ -101,7 +113,11 @@ fn main() -> Result<(), IrcError> {
         Ok(())
     });
 
-    reactor.run()
+    reactor.run()?;
+    if let Err(e) = thread.join() {
+        println!("receiver panicked, {:?}", e);
+    }
+    Ok(())
 }
 
 fn setup_client(config: Config, reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
