@@ -36,7 +36,7 @@ fn main() -> Result<(), IrcError> {
                     Err(e) => return Err(IrcError::Io(Error::new(ErrorKind::Other, e))),
                 };
                 if let Err(e) = tx.clone().send(t_msg) {
-                    IrcError::Io(Error::new(ErrorKind::Other, e));
+                    Error::new(ErrorKind::Other, e);
                 }
             }
             Command::PING(_, msg) => {
