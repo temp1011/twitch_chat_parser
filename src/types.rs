@@ -1,9 +1,3 @@
-//extern crate chrono;
-//extern crate irc;
-//extern crate serde_derive;
-//extern crate serde_json;
-extern crate serde_with_macros;
-
 use irc::client::prelude::*;
 use irc::proto::message::Tag;
 
@@ -93,10 +87,3 @@ impl TwitchMessage {
         })
     }
 }
-
-//                let t_msg = TwitchMessage {
-//                    tags: tgs,
-//                    channel: target.to_string(),
-//                    message: msg.to_string(),
-//                    raw: orig,
-//                };
