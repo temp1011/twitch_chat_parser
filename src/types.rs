@@ -43,8 +43,9 @@ impl TwitchTags {
                 "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
                 "room-id" => ret.room_id = val.map(map_to_int),
                 "tmi-sent-ts" => {
+                    //very ugly atm
                     ret.tmi_sent_ts = val
-                        .map(map_to_int)
+                        .map(|s| s.parse::<u64>().unwrap_or(0))
                         .map(|v| Utc.timestamp((v / 1000) as i64, ((v % 1000) * 1_000_000) as u32))
                 }
                 "user-id" => ret.user_id = val,
