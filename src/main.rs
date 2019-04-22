@@ -1,3 +1,9 @@
+#[macro_use]
+extern crate diesel;
+
+pub mod schema;
+pub mod models;
+pub mod db;
 use irc::client::prelude::*;
 use irc::error::IrcError;
 
@@ -23,8 +29,13 @@ fn main() -> Result<(), IrcError> {
     let (tx, rx) = channel::<TwitchMessage>();
 
     let thread = thread::spawn(move || {
-        while let Ok(v) = rx.recv() {
+        let conn = db::establish_connection();
+        while let Ok(mut v) = rx.recv() {
             println!("{}", serde_json::to_string(&v).unwrap());
+            match db::insert(&conn, &mut v) {
+                Ok(r) => {},
+                Err(e) => println!("{:?}", e),
+            }
         }
     });
 

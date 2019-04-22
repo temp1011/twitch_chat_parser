@@ -10,21 +10,21 @@ use chrono::TimeZone;
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct TwitchTags {
-    badge_info: Option<String>,
-    badges: Option<Vec<String>>,
-    bits: Option<u64>,
-    colour: Option<String>, //hex rgb
-    display_name: Option<String>,
-    emotes: Option<Vec<String>>,
-    id: Option<String>,
-    moderator: Option<bool>,
-    room_id: Option<u64>,
+    pub badge_info: Option<String>,
+    pub badges: Option<Vec<String>>,
+    pub bits: Option<i32>,
+    pub colour: Option<String>, //hex rgb
+    pub display_name: Option<String>,
+    pub emotes: Option<Vec<String>>,
+    pub id: Option<String>,
+    pub moderator: Option<bool>,
+    pub room_id: Option<i32>,
 
     //#[serde(with = "ts_milliseconds")] possible with custom deserializer
-    tmi_sent_ts: Option<DateTime<Utc>>,
-    user_id: Option<String>,
+    pub tmi_sent_ts: Option<DateTime<Utc>>,
+    pub user_id: Option<String>,
 }
 
 impl TwitchTags {
@@ -55,15 +55,15 @@ impl TwitchTags {
     }
 }
 
-fn map_to_int(s: String) -> u64 {
-    s.parse::<u64>().unwrap_or(0)
+fn map_to_int(s: String) -> i32 {
+    s.parse::<i32>().unwrap_or(0)
 }
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct TwitchMessage {
-    tags: TwitchTags,
-    channel: String,
-    message: String,
-    raw: String,
+    pub tags: TwitchTags,
+    pub channel: String,
+    pub message: String,
+    pub raw: String,
 }
 
 impl TwitchMessage {
