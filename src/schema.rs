@@ -1,6 +1,6 @@
 table! {
     messages (id) {
-        id -> Nullable<Integer>,
+        id -> Nullable<Text>,
         badge_info -> Nullable<Text>,
         badges -> Nullable<Text>,
         bits -> Nullable<Integer>,

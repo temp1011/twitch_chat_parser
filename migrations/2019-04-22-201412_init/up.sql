@@ -1,5 +1,5 @@
 CREATE TABLE messages (
-	id INTEGER PRIMARY KEY,
+	id TEXT PRIMARY KEY,
 	badge_info TEXT,
 	badges TEXT,
 	bits INTEGER,

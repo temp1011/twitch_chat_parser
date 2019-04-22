@@ -18,7 +18,7 @@ pub struct TwitchTags {
     pub colour: Option<String>, //hex rgb
     pub display_name: Option<String>,
     pub emotes: Option<Vec<String>>,
-    pub id: Option<String>,
+    pub id: Option<String>, //probably https://www.ietf.org/rfc/rfc4122.txt
     pub moderator: Option<bool>,
     pub room_id: Option<i32>,
 
