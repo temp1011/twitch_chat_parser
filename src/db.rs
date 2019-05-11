@@ -5,12 +5,12 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::env;
-pub fn establish_connection() -> SqliteConnection {
+
+pub fn establish_connection() -> ConnectionResult<SqliteConnection> {
     dotenv().ok();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
 }
 
 pub fn insert(conn: &SqliteConnection, message: &mut TwitchMessage) -> QueryResult<usize> {
@@ -37,7 +37,6 @@ pub fn insert(conn: &SqliteConnection, message: &mut TwitchMessage) -> QueryResu
         .execute(conn)
 }
 
-//TODO - where T: Deserialize?
-fn vec_to_json(v: Vec<String>) -> String {
+fn vec_to_json<T: serde::Serialize>(v: Vec<T>) -> String {
     serde_json::to_string(&v).unwrap()
 }

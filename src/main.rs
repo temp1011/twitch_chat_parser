@@ -28,13 +28,18 @@ fn main() -> Result<(), IrcError> {
 
     let (tx, rx) = channel::<TwitchMessage>();
 
-    let thread = thread::spawn(move || {
-        let conn = db::establish_connection();
-        while let Ok(mut v) = rx.recv() {
-            println!("{}", serde_json::to_string(&v).unwrap());
-            if let Err(e) = db::insert(&conn, &mut v) {
-                println!("{:?}", e);
+    let thread = thread::spawn(move || match db::establish_connection() {
+        Ok(conn) => {
+            while let Ok(mut v) = rx.recv() {
+                println!("{}", serde_json::to_string(&v).unwrap());
+                if let Err(e) = db::insert(&conn, &mut v) {
+                    eprintln!("{:?}", e);
+                }
             }
+        }
+        Err(e) => {
+            eprintln!("{:?}", e);
+            std::process::exit(-1);
         }
     });
 

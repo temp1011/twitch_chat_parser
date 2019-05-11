@@ -1,7 +1,7 @@
 use super::schema::messages;
 
 #[derive(Queryable, Insertable)]
-#[table_name="messages"]
+#[table_name = "messages"]
 pub struct Message {
     pub id: String,
     pub badge_info: Option<String>,
