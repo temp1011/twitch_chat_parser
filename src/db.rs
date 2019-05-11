@@ -13,8 +13,7 @@ pub fn establish_connection() -> ConnectionResult<SqliteConnection> {
     SqliteConnection::establish(&database_url)
 }
 
-pub fn insert(conn: &SqliteConnection, message: &mut TwitchMessage) -> QueryResult<usize> {
-    let message = message.clone();
+pub fn insert(conn: &SqliteConnection, message: TwitchMessage) -> QueryResult<usize> {
     let db_message = Message {
         id: message.tags.id.unwrap(),
         badge_info: message.tags.badge_info,

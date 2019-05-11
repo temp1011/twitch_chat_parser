@@ -10,7 +10,7 @@ use chrono::TimeZone;
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TwitchTags {
     pub badge_info: Option<String>,
     pub badges: Option<Vec<String>>,
@@ -43,7 +43,7 @@ impl TwitchTags {
                 "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
                 "room-id" => ret.room_id = val.map(map_to_int),
                 "tmi-sent-ts" => {
-                    //very ugly atm
+                    //very ugly atm, simplify with format string?
                     ret.tmi_sent_ts = val
                         .map(|s| s.parse::<u64>().unwrap_or(0))
                         .map(|v| Utc.timestamp((v / 1000) as i64, ((v % 1000) * 1_000_000) as u32))
@@ -59,7 +59,7 @@ impl TwitchTags {
 fn map_to_int(s: String) -> i32 {
     s.parse::<i32>().unwrap_or(0)
 }
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TwitchMessage {
     pub tags: TwitchTags,
     pub channel: String,

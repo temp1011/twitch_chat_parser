@@ -30,9 +30,9 @@ fn main() -> Result<(), IrcError> {
 
     let thread = thread::spawn(move || match db::establish_connection() {
         Ok(conn) => {
-            while let Ok(mut v) = rx.recv() {
+            while let Ok(v) = rx.recv() {
                 println!("{}", serde_json::to_string(&v).unwrap());
-                if let Err(e) = db::insert(&conn, &mut v) {
+                if let Err(e) = db::insert(&conn, v) {
                     eprintln!("{:?}", e);
                 }
             }
@@ -50,7 +50,7 @@ fn main() -> Result<(), IrcError> {
                     Ok(t) => t,
                     Err(e) => return Err(IrcError::Io(Error::new(ErrorKind::Other, e))),
                 };
-                if let Err(e) = tx.clone().send(t_msg) {
+                if let Err(e) = tx.send(t_msg) {
                     Error::new(ErrorKind::Other, e);
                 }
             }
