@@ -30,10 +30,14 @@ fn main() -> Result<(), IrcError> {
 
     let thread = thread::spawn(move || match db::establish_connection() {
         Ok(conn) => {
+            let mut nr = 0;
             while let Ok(v) = rx.recv() {
-                println!("{}", serde_json::to_string(&v).unwrap());
                 if let Err(e) = db::insert(&conn, v) {
                     eprintln!("{:?}", e);
+                } else {
+                    nr += 1;
+                    print!("\r");
+                    print!("messages received: {}", nr);
                 }
             }
         }
