@@ -6,6 +6,7 @@ use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::env;
 
+//TODO - handle errors better in this module
 pub fn establish_connection() -> ConnectionResult<SqliteConnection> {
     dotenv().ok();
 

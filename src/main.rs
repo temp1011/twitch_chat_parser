@@ -15,22 +15,23 @@ use std::io::{Error, ErrorKind};
 mod types;
 use types::TwitchMessage;
 
+mod channels;
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
 //too. The error handling here is probably too lax anyway.
 //
 //my errors here are awful...
 fn main() -> Result<(), IrcError> {
-    let config = Config::load("config.toml")?;
-
     let mut reactor = IrcReactor::new()?;
-    let client = setup_client(config, &mut reactor)?;
+    let client = setup_client(&mut reactor)?;
 
     let (tx, rx) = channel::<TwitchMessage>();
 
     let thread = thread::spawn(move || match db::establish_connection() {
         Ok(conn) => {
             let mut nr = 0;
+            //TODO - I'm pretty sure this fills up for fast input to need to batch to disk (I
+            //think), so use try_recv or batch automatically in db
             while let Ok(v) = rx.recv() {
                 if let Err(e) = db::insert(&conn, v) {
                     eprintln!("{:?}", e);
@@ -61,7 +62,7 @@ fn main() -> Result<(), IrcError> {
             Command::PING(_, msg) => {
                 client.send_pong(msg.unwrap_or_else(String::new))?;
             }
-            //Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
+            Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
             _ => {}
         }
         Ok(())
@@ -74,7 +75,22 @@ fn main() -> Result<(), IrcError> {
     Ok(())
 }
 
-fn setup_client(config: Config, reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
+fn setup_client(reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
+    let mut config = Config::load("config.toml")?;
+    let mut nick = "justinfan".to_string();
+    nick.push_str(&rand::random::<u16>().to_string());
+    config.nickname = Some(nick);
+
+    config.server = Some("irc.chat.twitch.tv".to_string());
+
+    //TODO - how to custom config?
+//    let config_number_channels: u64 = config.number_channels.unwrap_or(100);
+    let mut config_channels = config.channels.unwrap_or_default();
+    let mut top_channels = channels::top_connections(100u64.saturating_sub(config_channels.len() as u64)); 
+    config_channels.append(&mut top_channels);
+    config_channels.dedup();
+    config.channels = Some(config_channels);
+
     let client = reactor.prepare_client_and_connect(&config)?;
     client.send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])?;
     client.identify()?;

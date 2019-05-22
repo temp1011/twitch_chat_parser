@@ -13,6 +13,8 @@ serde_with_macros = "1.0.1"
 chrono = {version = "0.4.6", features = ["serde"]}
 diesel = {version = "1.4.2", features = ["sqlite"]}
 dotenv = "0.13.0"
+reqwest = "0.9.16"
+rand = "0.6.5"
 
 [profile.release]
 lto=true
