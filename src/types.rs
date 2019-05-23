@@ -2,14 +2,12 @@ use irc::client::prelude::*;
 use irc::proto::message::Tag;
 
 use serde_derive::{Deserialize, Serialize};
-use serde_with_macros::skip_serializing_none;
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::TimeZone;
 
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
-#[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TwitchTags {
     pub badge_info: Option<String>,
