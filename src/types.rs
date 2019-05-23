@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use irc::client::prelude::*;
 use irc::proto::message::Tag;
 
@@ -13,7 +15,7 @@ pub struct TwitchTags {
     pub badge_info: Option<String>,
     pub badges: Option<Vec<String>>,
     pub bits: Option<i32>,
-    pub colour: Option<String>, //hex rgb
+    pub color: Option<String>, //hex rgb
     pub display_name: Option<String>,
     pub emotes: Option<Vec<String>>,
     pub id: String, //probably https://www.ietf.org/rfc/rfc4122.txt
@@ -25,9 +27,10 @@ pub struct TwitchTags {
     pub user_id: Option<String>,
 }
 
-impl TwitchTags {
+impl TryFrom<Vec<Tag>> for TwitchTags {
+    type Error = &'static str;
     //TODO - throw on more or maybe deserializer
-    fn from_irc_tags(tags: Vec<Tag>) -> Result<TwitchTags, &'static str> {
+    fn try_from(tags: Vec<Tag>) -> Result<Self, Self::Error> {
         let mut ret: TwitchTags = Default::default();
         for t in tags.into_iter() {
             let val = t.1.filter(|x| !x.is_empty());
@@ -35,7 +38,7 @@ impl TwitchTags {
                 "badge-info" => ret.badge_info = val,
                 "badges" => ret.badges = val.map(|s| s.split(',').map(String::from).collect()),
                 "bits" => ret.bits = val.map(map_to_int),
-                "color" => ret.colour = val,
+                "color" => ret.color = val,
                 "display-name" => ret.display_name = val,
                 "emotes" => ret.emotes = val.map(|s| s.split('/').map(String::from).collect()),
                 "id" => {
@@ -82,7 +85,7 @@ impl TwitchMessage {
         let orig = message.to_string();
 
         let tgs = match &message.tags {
-            Some(t) => match TwitchTags::from_irc_tags(t.to_vec()) {
+            Some(t) => match TwitchTags::try_from(t.to_vec()) {
                 Ok(r) => r,
                 Err(e) => {
                     return Err(e);

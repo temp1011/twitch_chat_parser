@@ -3,7 +3,7 @@ CREATE TABLE messages (
 	badge_info TEXT,
 	badges TEXT,
 	bits INTEGER,
-	colour TEXT,
+	color TEXT,
 	display_name TEXT,
 	emotes TEXT,
 	message_id TEXT,

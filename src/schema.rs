@@ -4,7 +4,7 @@ table! {
         badge_info -> Nullable<Text>,
         badges -> Nullable<Text>,
         bits -> Nullable<Integer>,
-        colour -> Nullable<Text>,
+        color -> Nullable<Text>,
         display_name -> Nullable<Text>,
         emotes -> Nullable<Text>,
         message_id -> Nullable<Text>,
