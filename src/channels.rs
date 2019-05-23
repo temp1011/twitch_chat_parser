@@ -93,10 +93,7 @@ impl Request for UserResponse {}
 
 pub fn top_connections(number: u64) -> Vec<String> {
     let mut logins: Vec<String> = Vec::with_capacity(number as usize);
-    for page in (ChannelPages {
-        page: None,
-        number
-    }) {
+    for page in (ChannelPages { page: None, number }) {
         let ids: Vec<String> = page.data.into_iter().map(|x| x.user_id).collect();
         let resp = UserResponse::get_login_names(ids).unwrap();
         let mut l: Vec<String> = resp

@@ -18,7 +18,7 @@ pub struct TwitchTags {
     pub colour: Option<String>, //hex rgb
     pub display_name: Option<String>,
     pub emotes: Option<Vec<String>>,
-    pub id: Option<String>, //probably https://www.ietf.org/rfc/rfc4122.txt
+    pub id: String, //probably https://www.ietf.org/rfc/rfc4122.txt
     pub moderator: Option<bool>,
     pub room_id: Option<i32>,
 
@@ -28,7 +28,8 @@ pub struct TwitchTags {
 }
 
 impl TwitchTags {
-    fn from_irc_tags(tags: Vec<Tag>) -> TwitchTags {
+    //TODO - throw on more or maybe deserializer
+    fn from_irc_tags(tags: Vec<Tag>) -> Result<TwitchTags, &'static str> {
         let mut ret: TwitchTags = Default::default();
         for t in tags.into_iter() {
             let val = t.1.filter(|x| !x.is_empty());
@@ -39,7 +40,14 @@ impl TwitchTags {
                 "color" => ret.colour = val,
                 "display-name" => ret.display_name = val,
                 "emotes" => ret.emotes = val.map(|s| s.split('/').map(String::from).collect()),
-                "id" => ret.id = val,
+                "id" => {
+                    ret.id = match val {
+                        Some(i) => i,
+                        None => {
+                            return Err("id not present");
+                        }
+                    }
+                }
                 "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
                 "room-id" => ret.room_id = val.map(map_to_int),
                 "tmi-sent-ts" => {
@@ -52,7 +60,7 @@ impl TwitchTags {
                 _ => {}
             }
         }
-        ret
+        Ok(ret)
     }
 }
 
@@ -76,7 +84,12 @@ impl TwitchMessage {
         let orig = message.to_string();
 
         let tgs = match &message.tags {
-            Some(t) => TwitchTags::from_irc_tags(t.to_vec()),
+            Some(t) => match TwitchTags::from_irc_tags(t.to_vec()) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(e);
+                }
+            },
             _ => return Err("no tags present in message"),
         };
 

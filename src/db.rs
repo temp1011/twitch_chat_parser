@@ -7,16 +7,16 @@ use dotenv::dotenv;
 use std::env;
 
 //TODO - handle errors better in this module
-pub fn establish_connection() -> ConnectionResult<SqliteConnection> {
+pub fn establish_connection() -> Result<SqliteConnection, Box<std::error::Error>> {
     dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
+    let database_url = env::var("DATABASE_URL")?;
+    let conn = SqliteConnection::establish(&database_url)?;
+    Ok(conn)
 }
 
 pub fn insert(conn: &SqliteConnection, message: TwitchMessage) -> QueryResult<usize> {
     let db_message = Message {
-        id: message.tags.id.unwrap(),
+        id: message.tags.id,
         badge_info: message.tags.badge_info,
         badges: message.tags.badges.map(vec_to_json),
         bits: message.tags.bits,
@@ -38,5 +38,5 @@ pub fn insert(conn: &SqliteConnection, message: TwitchMessage) -> QueryResult<us
 }
 
 fn vec_to_json<T: serde::Serialize>(v: Vec<T>) -> String {
-    serde_json::to_string(&v).unwrap()
+    serde_json::to_string(&v).unwrap_or_default()
 }

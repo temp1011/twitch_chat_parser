@@ -16,6 +16,9 @@ mod types;
 use types::TwitchMessage;
 
 mod channels;
+
+const MAX_CHANNELS: u64 = 20;
+
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
 //too. The error handling here is probably too lax anyway.
@@ -84,9 +87,10 @@ fn setup_client(reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
     config.server = Some("irc.chat.twitch.tv".to_string());
 
     //TODO - how to custom config?
-//    let config_number_channels: u64 = config.number_channels.unwrap_or(100);
+    //    let config_number_channels: u64 = config.number_channels.unwrap_or(100);
     let mut config_channels = config.channels.unwrap_or_default();
-    let mut top_channels = channels::top_connections(100u64.saturating_sub(config_channels.len() as u64)); 
+    let mut top_channels =
+        channels::top_connections(MAX_CHANNELS.saturating_sub(config_channels.len() as u64));
     config_channels.append(&mut top_channels);
     config_channels.dedup();
     config.channels = Some(config_channels);
