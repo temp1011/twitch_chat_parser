@@ -14,7 +14,7 @@ use types::TwitchMessage;
 
 mod channels;
 
-const MAX_CHANNELS: u64 = 20;
+const MAX_CHANNELS: u64 = 150;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors

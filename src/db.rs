@@ -7,11 +7,11 @@ use dotenv::dotenv;
 use std::env;
 use std::sync::mpsc;
 
-//TwitchMessageODO - handle errors better in this module
+//TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 100;
 //wrapper over db connection to batch insert messages and make code a bit cleaner
-//TwitchMessageODO - a way to clean up all the lifetime and type parameters. And is static a problem?
+//TODO - a way to clean up all the lifetime and type parameters. And is static a problem?
 pub struct DB {
     conn: SqliteConnection, //move this to more generic connection to make it easier to swap db
     queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
@@ -39,30 +39,33 @@ impl DB {
         });
         Ok(sender)
     }
-    //TODO - implement these
-    //this should panic if things are very broken eg - database disappears
-    fn run(&mut self) -> () {
+    //TODO - this should panic if things are very broken eg - database disappears
+    fn run(&mut self) {
         let mut nr = 0;
         while let Ok(v) = self.queue.1.recv() {
-            match self.batch.try_push(v) {
-                Err(r) => {
-                    let res = self.insert();
-                    if let Ok(num) = res {
-                        nr += num;
-                        println!("messages inserted: {}", nr);
-                    }
-                    debug_assert!(self.batch.len() == 0);
-                    self.batch.push(r.element());
+            if let Err(returned) = self.batch.try_push(v) {
+                if let Ok(num) = self.flush() {
+                    nr += num;
+                    println!("messages inserted: {}", nr);
                 }
-                _ => {}
+                self.batch.push(returned.element());
             }
         }
     }
 
-    //or custom drop impl?
-    pub fn flush(&mut self) {}
+    //without assert can just be inlined or potentially some error handling. I just need tests I
+    //think.
+    pub fn flush(&mut self) -> Result<usize, diesel::result::Error> {
+        match self.insert() {
+            Ok(num) => {
+                debug_assert!(self.batch.len() == 0);
+                Ok(num)
+            }
+            Err(e) => Err(e)
+        }
+    }
 
-    pub fn insert(&mut self) -> QueryResult<usize> {
+    fn insert(&mut self) -> QueryResult<usize> {
         let records: Vec<Message> = self
             .batch
             .drain(0..BATCH_SIZE) //ugly...
@@ -78,6 +81,6 @@ impl DB {
 //TODO - is this correct?
 impl Drop for DB {
     fn drop(&mut self) {
-        self.flush();
+        self.flush();   //look at result here?
     }
 }
