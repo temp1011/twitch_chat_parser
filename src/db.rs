@@ -1,42 +1,83 @@
 use crate::models::Message;
 use crate::schema::messages;
 use crate::types::TwitchMessage;
+use arrayvec::ArrayVec;
 use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::env;
+use std::sync::mpsc;
 
-//TODO - handle errors better in this module
-pub fn establish_connection() -> Result<SqliteConnection, Box<std::error::Error>> {
-    dotenv().ok();
-    let database_url = env::var("DATABASE_URL")?;
-    let conn = SqliteConnection::establish(&database_url)?;
-    Ok(conn)
+//TwitchMessageODO - handle errors better in this module
+
+const BATCH_SIZE: usize = 100;
+//wrapper over db connection to batch insert messages and make code a bit cleaner
+//TwitchMessageODO - a way to clean up all the lifetime and type parameters. And is static a problem?
+pub struct DB {
+    conn: SqliteConnection, //move this to more generic connection to make it easier to swap db
+    queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
+    batch: ArrayVec<[TwitchMessage; BATCH_SIZE]>,
 }
 
-pub fn insert(conn: &SqliteConnection, message: TwitchMessage) -> QueryResult<usize> {
-    let db_message = Message {
-        id: message.tags.id,
-        badge_info: message.tags.badge_info,
-        badges: message.tags.badges.map(vec_to_json),
-        bits: message.tags.bits,
-        colour: message.tags.colour,
-        display_name: message.tags.display_name,
-        emotes: message.tags.emotes.map(vec_to_json),
-        moderator: message.tags.moderator,
-        room_id: message.tags.room_id,
-        tmi_sent_ts: message.tags.tmi_sent_ts.map(|d| d.to_string()),
-        user_id: message.tags.user_id,
-        channel: message.channel,
-        message: message.message,
-        raw_message: message.raw.trim().to_string(),
-    };
+impl DB {
+    fn new() -> Result<DB, Box<std::error::Error>> {
+        dotenv().ok();
+        let database_url = env::var("DATABASE_URL")?;
+        let conn = SqliteConnection::establish(&database_url)?;
+        let ret = DB {
+            conn,
+            queue: mpsc::channel::<TwitchMessage>(),
+            batch: ArrayVec::new(),
+        };
+        Ok(ret)
+    }
 
-    diesel::insert_into(messages::table)
-        .values(&db_message)
-        .execute(conn)
+    pub fn connection() -> Result<mpsc::Sender<TwitchMessage>, Box<std::error::Error>> {
+        let mut datab: DB = DB::new()?;
+        let sender = datab.queue.0.clone();
+        std::thread::spawn(move || {
+            datab.run();
+        });
+        Ok(sender)
+    }
+    //TODO - implement these
+    //this should panic if things are very broken eg - database disappears
+    fn run(&mut self) -> () {
+        let mut nr = 0;
+        while let Ok(v) = self.queue.1.recv() {
+            match self.batch.try_push(v) {
+                Err(r) => {
+                    let res = self.insert();
+                    if let Ok(num) = res {
+                        nr += num;
+                        println!("messages inserted: {}", nr);
+                    }
+                    debug_assert!(self.batch.len() == 0);
+                    self.batch.push(r.element());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    //or custom drop impl?
+    pub fn flush(&mut self) {}
+
+    pub fn insert(&mut self) -> QueryResult<usize> {
+        let records: Vec<Message> = self
+            .batch
+            .drain(0..BATCH_SIZE) //ugly...
+            .map(Message::from)
+            .collect();
+
+        diesel::insert_into(messages::table)
+            .values(records)
+            .execute(&self.conn)
+    }
 }
 
-fn vec_to_json<T: serde::Serialize>(v: Vec<T>) -> String {
-    serde_json::to_string(&v).unwrap_or_default()
+//TODO - is this correct?
+impl Drop for DB {
+    fn drop(&mut self) {
+        self.flush();
+    }
 }

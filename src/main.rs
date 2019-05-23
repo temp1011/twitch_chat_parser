@@ -7,9 +7,6 @@ pub mod schema;
 use irc::client::prelude::*;
 use irc::error::IrcError;
 
-use std::sync::mpsc::channel;
-use std::thread;
-
 use std::io::{Error, ErrorKind};
 
 mod types;
@@ -27,30 +24,7 @@ const MAX_CHANNELS: u64 = 20;
 fn main() -> Result<(), IrcError> {
     let mut reactor = IrcReactor::new()?;
     let client = setup_client(&mut reactor)?;
-
-    let (tx, rx) = channel::<TwitchMessage>();
-
-    let thread = thread::spawn(move || match db::establish_connection() {
-        Ok(conn) => {
-            let mut nr = 0;
-            //TODO - I'm pretty sure this fills up for fast input to need to batch to disk (I
-            //think), so use try_recv or batch automatically in db
-            while let Ok(v) = rx.recv() {
-                if let Err(e) = db::insert(&conn, v) {
-                    eprintln!("{:?}", e);
-                } else {
-                    nr += 1;
-                    print!("\r");
-                    print!("messages received: {}", nr);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("{:?}", e);
-            std::process::exit(-1);
-        }
-    });
-
+    let conn = db::DB::connection().unwrap();
     reactor.register_client_with_handler(client, move |client, message| {
         match message.command {
             Command::PRIVMSG(ref target, ref msg) => {
@@ -58,7 +32,7 @@ fn main() -> Result<(), IrcError> {
                     Ok(t) => t,
                     Err(e) => return Err(IrcError::Io(Error::new(ErrorKind::Other, e))),
                 };
-                if let Err(e) = tx.send(t_msg) {
+                if let Err(e) = conn.send(t_msg) {
                     Error::new(ErrorKind::Other, e);
                 }
             }
@@ -72,9 +46,6 @@ fn main() -> Result<(), IrcError> {
     });
 
     reactor.run()?;
-    if let Err(e) = thread.join() {
-        println!("receiver panicked, {:?}", e);
-    }
     Ok(())
 }
 
