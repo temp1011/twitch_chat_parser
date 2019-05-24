@@ -10,10 +10,12 @@ use std::sync::mpsc;
 //TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 100;
-//wrapper over db connection to batch insert messages and make code a bit cleaner
-//TODO - a way to clean up all the lifetime and type parameters. And is static a problem?
+//wrapper over db connection to batch insert messages and make code a bit cleaner. Also allows
+//easier use of database while program is running since batching means the db isn't constantly
+//locked.
+//TODO - try to make this less database dependant
 pub struct DB {
-    conn: SqliteConnection, //move this to more generic connection to make it easier to swap db
+    conn: SqliteConnection,
     queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
     batch: ArrayVec<[TwitchMessage; BATCH_SIZE]>,
 }
@@ -61,7 +63,7 @@ impl DB {
                 debug_assert!(self.batch.len() == 0);
                 Ok(num)
             }
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
@@ -81,6 +83,6 @@ impl DB {
 //TODO - is this correct?
 impl Drop for DB {
     fn drop(&mut self) {
-        self.flush();   //look at result here?
+        self.flush(); //look at result here?
     }
 }

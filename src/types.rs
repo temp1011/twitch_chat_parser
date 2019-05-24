@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 use irc::client::prelude::*;
 use irc::proto::message::Tag;
@@ -76,29 +77,42 @@ pub struct TwitchMessage {
     pub raw: String,
 }
 
-impl TwitchMessage {
-    pub fn from_irc_message(
-        message: &Message,
-        target: &str,
-        text: &str,
-    ) -> Result<TwitchMessage, &'static str> {
-        let orig = message.to_string();
+impl TryFrom<&Message> for TwitchMessage {
+    type Error = &'static str;
 
-        let tgs = match &message.tags {
-            Some(t) => match TwitchTags::try_from(t.to_vec()) {
-                Ok(r) => r,
-                Err(e) => {
-                    return Err(e);
-                }
-            },
-            _ => return Err("no tags present in message"),
-        };
+    fn try_from(irc_msg: &Message) -> Result<Self, Self::Error> {
+        if let Command::PRIVMSG(ref target, ref msg) = irc_msg.command {
+            let orig = irc_msg.to_string();
 
-        Ok(TwitchMessage {
-            tags: tgs,
-            channel: target.to_string(),
-            message: text.to_string(),
-            raw: orig,
-        })
+            let tgs = match &irc_msg.tags {
+                Some(t) => match TwitchTags::try_from(t.to_vec()) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return Err(e);
+                    }
+                },
+                _ => return Err("no tags present in message"),
+            };
+
+            Ok(TwitchMessage {
+                tags: tgs,
+                channel: target.to_string(),
+                message: msg.to_string(),
+                raw: orig,
+            })
+        } else {
+            Err("Not a PRIVMSG")
+        }
+    }
+}
+
+impl FromStr for TwitchMessage {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<Message>() {
+            Ok(msg) => TwitchMessage::try_from(&msg),
+            Err(e) => Err("could not be parsed to irc message"), //should pass actual type here
+        }
     }
 }

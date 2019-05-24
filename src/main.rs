@@ -7,6 +7,7 @@ pub mod schema;
 use irc::client::prelude::*;
 use irc::error::IrcError;
 
+use std::convert::TryFrom;
 use std::io::{Error, ErrorKind};
 
 mod types;
@@ -26,16 +27,14 @@ fn main() -> Result<(), IrcError> {
     let client = setup_client(&mut reactor)?;
     let conn = db::DB::connection().unwrap();
     reactor.register_client_with_handler(client, move |client, message| {
-        match message.command {
-            Command::PRIVMSG(ref target, ref msg) => {
-                let t_msg = match TwitchMessage::from_irc_message(&message, target, msg) {
-                    Ok(t) => t,
-                    Err(e) => return Err(IrcError::Io(Error::new(ErrorKind::Other, e))),
-                };
-                if let Err(e) = conn.send(t_msg) {
-                    Error::new(ErrorKind::Other, e);
-                }
+        if let Ok(t_msg) = TwitchMessage::try_from(&message) {
+            if let Err(e) = conn.send(t_msg) {
+                Error::new(ErrorKind::Other, e);
             }
+            return Ok(());
+        }
+
+        match message.command {
             Command::PING(_, msg) => {
                 client.send_pong(msg.unwrap_or_else(String::new))?;
             }
