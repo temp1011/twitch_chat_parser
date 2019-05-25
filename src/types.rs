@@ -4,7 +4,7 @@ use std::str::FromStr;
 use irc::client::prelude::*;
 use irc::proto::message::Tag;
 
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::TimeZone;

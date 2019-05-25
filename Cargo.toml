@@ -6,8 +6,7 @@ edition = "2018"
 
 [dependencies]
 irc = "0.13.6"
-serde="1.0.90"
-serde_derive="1.0.90"
+serde={version = "1.0.90", features = ["derive"]}
 serde_json="1.0.39"
 chrono = {version = "0.4.6", features = ["serde"]}
 diesel = {version = "1.4.2", features = ["sqlite"]}
