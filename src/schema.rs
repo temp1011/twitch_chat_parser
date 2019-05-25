@@ -8,7 +8,8 @@ table! {
         display_name -> Nullable<Text>,
         emotes -> Nullable<Text>,
         message_id -> Nullable<Text>,
-        moderator -> Nullable<Bool>,
+        #[sql_name = "mod"]
+        mod_ -> Nullable<Bool>,
         room_id -> Nullable<Integer>,
         tmi_sent_ts -> Nullable<Timestamp>,
         user_id -> Nullable<Text>,
