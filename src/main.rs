@@ -15,7 +15,7 @@ use types::TwitchMessage;
 
 mod channels;
 
-const MAX_CHANNELS: u64 = 150;
+const MAX_CHANNELS: u64 = 300;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
@@ -26,6 +26,7 @@ fn main() -> Result<(), IrcError> {
     let mut reactor = IrcReactor::new()?;
     let client = setup_client(&mut reactor)?;
     let conn = db::DB::connection().unwrap();
+    //TODO - use multiple clients for better parallelism
     reactor.register_client_with_handler(client, move |client, message| {
         if let Ok(t_msg) = TwitchMessage::try_from(&message) {
             if let Err(e) = conn.send(t_msg) {

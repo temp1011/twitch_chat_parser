@@ -9,7 +9,7 @@ use std::sync::mpsc;
 
 //TODO - handle errors better in this module
 
-const BATCH_SIZE: usize = 100;
+const BATCH_SIZE: usize = 1024;
 //wrapper over db connection to batch insert messages and make code a bit cleaner. Also allows
 //easier use of database while program is running since batching means the db isn't constantly
 //locked.
