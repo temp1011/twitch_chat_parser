@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use chrono::prelude::{DateTime, Utc};
 use chrono::TimeZone;
 
+use crate::error::MyError;
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -29,7 +30,7 @@ pub struct TwitchTags {
 }
 
 impl TryFrom<Vec<Tag>> for TwitchTags {
-    type Error = &'static str;
+    type Error = MyError;
     //TODO - throw on more or maybe deserializer
     fn try_from(tags: Vec<Tag>) -> Result<Self, Self::Error> {
         let mut ret: TwitchTags = Default::default();
@@ -43,10 +44,11 @@ impl TryFrom<Vec<Tag>> for TwitchTags {
                 "display-name" => ret.display_name = val,
                 "emotes" => ret.emotes = val.map(|s| s.split('/').map(String::from).collect()),
                 "id" => {
+                    //unwrap_or cleaner?
                     ret.id = match val {
                         Some(i) => i,
                         None => {
-                            return Err("id not present");
+                            return Err(MyError::Parse("id not present"));
                         }
                     }
                 }
@@ -78,20 +80,16 @@ pub struct TwitchMessage {
 }
 
 impl TryFrom<&Message> for TwitchMessage {
-    type Error = &'static str;
+    type Error = MyError;
 
     fn try_from(irc_msg: &Message) -> Result<Self, Self::Error> {
         if let Command::PRIVMSG(ref target, ref msg) = irc_msg.command {
             let orig = irc_msg.to_string();
 
+            //unwrap_or?
             let tgs = match &irc_msg.tags {
-                Some(t) => match TwitchTags::try_from(t.to_vec()) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                },
-                _ => return Err("no tags present in message"),
+                Some(t) => TwitchTags::try_from(t.to_vec())?,
+                _ => return Err(MyError::Parse("no tags present in message")),
             };
 
             Ok(TwitchMessage {
@@ -101,18 +99,18 @@ impl TryFrom<&Message> for TwitchMessage {
                 raw: orig,
             })
         } else {
-            Err("Not a PRIVMSG")
+            Err(MyError::Parse("Not a PRIVMSG"))
         }
     }
 }
 
 impl FromStr for TwitchMessage {
-    type Err = &'static str;
+    type Err = MyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<Message>() {
             Ok(msg) => TwitchMessage::try_from(&msg),
-            Err(e) => Err("could not be parsed to irc message"), //should pass actual type here
+            Err(e) => Err(MyError::Parse("could not be parsed to irc message")), //should pass actual type here
         }
     }
 }
