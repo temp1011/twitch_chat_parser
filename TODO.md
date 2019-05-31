@@ -1,5 +1,5 @@
 TODO
-- errors
+- errors. They are now slightly improved
 - split up modules more
 - websocket backend
 - use multiple clients for better parallel

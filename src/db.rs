@@ -6,7 +6,7 @@ use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
 use std::sync::mpsc;
-
+use crate::error::MyError;
 //TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 1024;
@@ -21,7 +21,7 @@ pub struct DB {
 }
 
 impl DB {
-    fn new() -> Result<DB, Box<std::error::Error>> {
+    fn new() -> Result<DB, MyError> {
         dotenv().ok();
         let database_url = env::var("DATABASE_URL")?;
         let conn = SqliteConnection::establish(&database_url)?;
@@ -33,7 +33,7 @@ impl DB {
         Ok(ret)
     }
 
-    pub fn connection() -> Result<mpsc::Sender<TwitchMessage>, Box<std::error::Error>> {
+    pub fn connection() -> Result<mpsc::Sender<TwitchMessage>, MyError> {
         let mut datab: DB = DB::new()?;
         let sender = datab.queue.0.clone();
         std::thread::spawn(move || {
@@ -57,13 +57,13 @@ impl DB {
 
     //without assert can just be inlined or potentially some error handling. I just need tests I
     //think.
-    pub fn flush(&mut self) -> Result<usize, diesel::result::Error> {
+    pub fn flush(&mut self) -> Result<usize, MyError> {
         match self.insert() {
             Ok(num) => {
                 debug_assert!(self.batch.len() == 0);
                 Ok(num)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(MyError::Db(Box::new(e))),
         }
     }
 
