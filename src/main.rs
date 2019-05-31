@@ -1,9 +1,9 @@
 #[macro_use]
 extern crate diesel;
 
-pub mod db;
-pub mod models;
-pub mod schema;
+mod db;
+mod models;
+mod schema;
 use irc::client::prelude::*;
 use irc::error::IrcError;
 
@@ -14,7 +14,7 @@ mod types;
 use types::TwitchMessage;
 
 mod channels;
-
+mod error;
 const MAX_CHANNELS: u64 = 300;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
@@ -22,7 +22,7 @@ const MAX_CHANNELS: u64 = 300;
 //too. The error handling here is probably too lax anyway.
 //
 //my errors here are awful...
-fn main() -> Result<(), IrcError> {
+fn main() -> Result<(), error::MyError> {
     let mut reactor = IrcReactor::new()?;
     let client = setup_client(&mut reactor)?;
     let conn = db::DB::connection().unwrap();
