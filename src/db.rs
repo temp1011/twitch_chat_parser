@@ -1,3 +1,4 @@
+use crate::error::MyError;
 use crate::models::Message;
 use crate::schema::messages;
 use crate::types::TwitchMessage;
@@ -6,14 +7,13 @@ use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
 use std::sync::mpsc;
-use crate::error::MyError;
 //TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 1024;
 //wrapper over db connection to batch insert messages and make code a bit cleaner. Also allows
 //easier use of database while program is running since batching means the db isn't constantly
 //locked.
-//TODO - try to make this less database dependant
+//TODO - try to make this less database backend dependant
 pub struct DB {
     conn: SqliteConnection,
     queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
@@ -33,6 +33,7 @@ impl DB {
         Ok(ret)
     }
 
+    //should this be a method on the db instead and multiple calls just clones the sender?
     pub fn connection() -> Result<mpsc::Sender<TwitchMessage>, MyError> {
         let mut datab: DB = DB::new()?;
         let sender = datab.queue.0.clone();
