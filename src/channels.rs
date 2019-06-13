@@ -47,6 +47,7 @@ struct ChannelPages {
     number: u64,
 }
 
+//TODO - stack overflow somewhere here in debug mode. Need to rewrite more iteratively
 impl Iterator for ChannelPages {
     type Item = ChannelResponse;
 
