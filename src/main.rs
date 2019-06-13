@@ -27,6 +27,7 @@ fn main() -> Result<(), error::MyError> {
     let client = setup_client(&mut reactor)?;
     let conn = db::DB::connection().unwrap();
     //TODO - use multiple clients for better parallelism
+    //also solves stackoverflow error here: https://github.com/aatxe/irc/blob/4edb99f000532d2059043cc709700d12d37c31f1/src/client/reactor.rs#L189-L192
     reactor.register_client_with_handler(client, move |client, message| {
         if let Ok(t_msg) = TwitchMessage::try_from(&message) {
             if let Err(e) = conn.send(t_msg) {
@@ -44,7 +45,7 @@ fn main() -> Result<(), error::MyError> {
         }
         Ok(())
     });
-
+    
     reactor.run()?;
     Ok(())
 }
