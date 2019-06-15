@@ -2,7 +2,6 @@ use crate::error::MyError;
 use crate::models::Message;
 use crate::schema::messages;
 use crate::types::TwitchMessage;
-use arrayvec::ArrayVec;
 use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
@@ -17,7 +16,7 @@ const BATCH_SIZE: usize = 1024;
 pub struct DB {
     conn: SqliteConnection,
     queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
-    batch: ArrayVec<[TwitchMessage; BATCH_SIZE]>,
+    batch: Vec<TwitchMessage>,
 }
 
 impl DB {
@@ -28,7 +27,7 @@ impl DB {
         let ret = DB {
             conn,
             queue: mpsc::channel::<TwitchMessage>(),
-            batch: ArrayVec::new(),
+            batch: Vec::with_capacity(BATCH_SIZE),
         };
         Ok(ret)
     }
@@ -46,15 +45,15 @@ impl DB {
     fn run(&mut self) {
         let mut nr = 0;
         while let Ok(v) = self.queue.1.recv() {
-            if let Err(returned) = self.batch.try_push(v) {
+            self.batch.push(v);
+            if self.batch.len() >= BATCH_SIZE {
                 if let Ok(num) = self.flush() {
                     nr += num;
                     println!("messages inserted: {}", nr);
                 }
-                self.batch.push(returned.element());
+            }
             }
         }
-    }
 
     //without assert can just be inlined or potentially some error handling. I just need tests I
     //think.
@@ -71,7 +70,7 @@ impl DB {
     fn insert(&mut self) -> QueryResult<usize> {
         let records: Vec<Message> = self
             .batch
-            .drain(0..BATCH_SIZE) //ugly...
+            .drain(..) 
             .map(Message::from)
             .collect();
 
