@@ -60,7 +60,7 @@ impl DB {
     pub fn flush(&mut self) -> Result<usize, MyError> {
         match self.insert() {
             Ok(num) => {
-                debug_assert!(self.batch.len() == 0);
+                debug_assert!(self.batch.is_empty());
                 Ok(num)
             }
             Err(e) => Err(MyError::Db(Box::new(e))),
