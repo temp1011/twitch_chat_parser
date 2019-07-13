@@ -16,6 +16,7 @@ const BATCH_SIZE: usize = 1024;
 pub struct DB {
     conn: SqliteConnection,
     queue: (mpsc::Sender<TwitchMessage>, mpsc::Receiver<TwitchMessage>),
+    //this used to use ArrayVec but there was an issue with stackoverflow on debug builds
     batch: Vec<TwitchMessage>,
 }
 

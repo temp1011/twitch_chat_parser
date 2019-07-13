@@ -8,3 +8,7 @@ TODO
 - if we do have uuid as in rfc in code comment, maybe convert to bytes/integer in db.
 - explore indexes in db. Index on channel makes things very fast.
 - convert to lib. Options should be (at least): dbs {sqlite, postgres, none (return mpsc receiver to user)}, procedure {websocket, irc}. Also means the code needs to handle less configuration
+- see https://github.com/OgulcanCelik/twitch-clip-chat
+- see https://github.com/freaktechnik/twitch-chatlog (also very pretty etc)
+- see https://github.com/dongy7/twitch-chat-cli for potentially retrieving emotes too
+- see w3m, https://blog.z3bra.org/2014/01/images-in-terminal.html, iterm2, alacritty which I believe all support images
