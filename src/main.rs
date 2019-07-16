@@ -66,7 +66,6 @@ fn setup_client(reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
     config_channels.append(&mut top_channels);
     config_channels.dedup();
     config.channels = Some(config_channels);
-
     let client = reactor.prepare_client_and_connect(&config)?;
     client.send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])?;
     client.identify()?;

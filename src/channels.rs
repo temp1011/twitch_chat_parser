@@ -9,7 +9,7 @@ struct Pagination {
 //they don't serve much use.
 #[derive(Serialize, Deserialize, Debug)]
 struct ChannelJson {
-    community_ids: Vec<String>,
+    community_ids: Option<Vec<String>>,
     game_id: String,
     id: String,
     language: String,
@@ -95,6 +95,7 @@ pub fn top_connections(number: u64) -> Vec<String> {
     let mut logins: Vec<String> = Vec::with_capacity(number as usize);
     for page in (ChannelPages { page: None, number }) {
         let ids: Vec<String> = page.data.into_iter().map(|x| x.user_id).collect();
+        // TODO - pull outside loop
         let resp = UserResponse::get_login_names(ids).unwrap();
         let mut l: Vec<String> = resp
             .data
@@ -133,4 +134,23 @@ impl UserResponse {
         let params: Vec<(&str, String)> = userids.into_iter().map(|s| ("id", s)).collect();
         Request::request("users", params)
     }
+}
+
+#[test]
+fn test_get_login_names() {
+    let resp = UserResponse::get_login_names(vec!["23161357".to_string()]).unwrap();
+    assert!(resp.data.len() == 1);
+    assert_eq!(resp.data[0].display_name, "LIRIK");
+}
+
+#[test]
+fn test_top_connections() {
+    let resp = top_connections(10);
+    assert_eq!(resp.len(), 10);
+}
+
+#[test]
+fn test_channel_response() {
+    let resp = ChannelResponse::get(4, None).unwrap();
+    assert_eq!(4, resp.data.len());
 }
