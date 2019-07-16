@@ -24,7 +24,7 @@ const MAX_CHANNELS: u64 = 300;
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
     let mut reactor = IrcReactor::new()?;
-    
+
     let conn = db::DB::connection().unwrap();
     let client = setup_client(&mut reactor)?;
     //TODO - use multiple clients for better parallelism
@@ -45,7 +45,7 @@ fn main() -> Result<(), error::MyError> {
         }
         Ok(())
     });
-    
+
     reactor.run()?;
     Ok(())
 }

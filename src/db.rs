@@ -53,8 +53,8 @@ impl DB {
                     println!("messages inserted: {}", nr);
                 }
             }
-            }
         }
+    }
 
     //without assert can just be inlined or potentially some error handling. I just need tests I
     //think.
@@ -69,11 +69,7 @@ impl DB {
     }
 
     fn insert(&mut self) -> QueryResult<usize> {
-        let records: Vec<Message> = self
-            .batch
-            .drain(..) 
-            .map(Message::from)
-            .collect();
+        let records: Vec<Message> = self.batch.drain(..).map(Message::from).collect();
 
         diesel::insert_into(messages::table)
             .values(records)
