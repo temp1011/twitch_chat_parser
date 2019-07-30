@@ -6,6 +6,7 @@ use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
 use std::sync::mpsc;
+use chrono::Utc;
 //TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 1024;
@@ -50,7 +51,7 @@ impl DB {
             if self.batch.len() >= BATCH_SIZE {
                 if let Ok(num) = self.flush() {
                     nr += num;
-                    println!("messages inserted: {}", nr);
+                    println!("[{}] messages inserted: {}", Utc::now(), nr);
                 }
             }
         }
