@@ -1,3 +1,4 @@
+//TODO use failure crate?
 #[derive(Debug)]
 pub enum MyError {
     Irc(irc::error::IrcError),

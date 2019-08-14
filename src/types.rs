@@ -6,27 +6,47 @@ use irc::proto::message::Tag;
 
 use serde::{Deserialize, Serialize};
 
-use chrono::prelude::{DateTime, Utc};
-use chrono::TimeZone;
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use crate::error::MyError;
+use std::time::{Duration, UNIX_EPOCH};
+
+use uuid::Uuid;
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TwitchTags {
     pub badge_info: Option<String>,
     pub badges: Option<Vec<String>>,
     pub bits: Option<i32>,
-    pub color: Option<String>, //hex rgb
-    pub display_name: Option<String>,
-    pub emotes: Option<Vec<String>>,
-    pub id: String, //probably https://www.ietf.org/rfc/rfc4122.txt
-    pub moderator: Option<bool>,
-    pub room_id: Option<i32>,
 
-    //#[serde(with = "ts_milliseconds")] possible with custom deserializer
-    pub tmi_sent_ts: Option<DateTime<Utc>>,
-    pub user_id: Option<String>,
+    //https://en.wikipedia.org/wiki/Web_colors
+    pub color: Option<String>,
+    pub display_name: String,
+    pub emotes: Option<Vec<String>>,
+    pub id: Uuid,
+    pub moderator: Option<bool>,
+    pub room_id: i32,
+    pub tmi_sent_ts: DateTime<Utc>,
+    pub user_id: String,
+}
+
+impl Default for TwitchTags {
+    fn default() -> Self {
+        TwitchTags {
+            badge_info: None,
+            badges: None,
+            bits: None,
+            color: None,
+            display_name: "".to_string(),
+            emotes: None,
+            id: Uuid::nil(),
+            moderator: None,
+            room_id: 0,
+            user_id: "".to_string(),
+            tmi_sent_ts: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+        }
+    }
 }
 
 impl TryFrom<Vec<Tag>> for TwitchTags {
@@ -41,26 +61,30 @@ impl TryFrom<Vec<Tag>> for TwitchTags {
                 "badges" => ret.badges = val.map(|s| s.split(',').map(String::from).collect()),
                 "bits" => ret.bits = val.map(map_to_int),
                 "color" => ret.color = val,
-                "display-name" => ret.display_name = val,
+                "display-name" => {
+                    ret.display_name = val.ok_or(MyError::Parse("Display name not present"))?
+                }
                 "emotes" => ret.emotes = val.map(|s| s.split('/').map(String::from).collect()),
+                //TODO lose an opputunity to capture the parse error here.
                 "id" => {
-                    //unwrap_or cleaner?
-                    ret.id = match val {
-                        Some(i) => i,
-                        None => {
-                            return Err(MyError::Parse("id not present"));
-                        }
-                    }
+                    ret.id = val
+                        .as_ref()
+                        .and_then(|v| Uuid::parse_str(v).ok())
+                        .ok_or(MyError::Parse("message id not present"))?
                 }
                 "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
-                "room-id" => ret.room_id = val.map(map_to_int),
-                "tmi-sent-ts" => {
-                    //very ugly atm, simplify with format string?
-                    ret.tmi_sent_ts = val
-                        .map(|s| s.parse::<u64>().unwrap_or(0))
-                        .map(|v| Utc.timestamp((v / 1000) as i64, ((v % 1000) * 1_000_000) as u32))
+                "room-id" => {
+                    ret.room_id = val
+                        .map(map_to_int)
+                        .ok_or(MyError::Parse("Room id not present"))?
                 }
-                "user-id" => ret.user_id = val,
+                "tmi-sent-ts" => {
+                    ret.tmi_sent_ts = val
+                        .and_then(|s| s.parse::<u64>().ok()) //TODO might be nice to integrate this to error chain too
+                        .map(|v| DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(v)))
+                        .ok_or(MyError::Parse("Timestamp not present"))?
+                }
+                "user-id" => ret.user_id = val.ok_or(MyError::Parse("User id not present"))?,
                 _ => {}
             }
         }

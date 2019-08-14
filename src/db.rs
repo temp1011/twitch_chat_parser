@@ -2,11 +2,11 @@ use crate::error::MyError;
 use crate::models::Message;
 use crate::schema::messages;
 use crate::types::TwitchMessage;
+use chrono::Utc;
 use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
 use std::sync::mpsc;
-use chrono::Utc;
 //TODO - handle errors better in this module
 
 const BATCH_SIZE: usize = 1024;

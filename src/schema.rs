@@ -1,20 +1,19 @@
 table! {
     messages (id) {
-        id -> Nullable<Text>,
+        id -> Text,
         badge_info -> Nullable<Text>,
         badges -> Nullable<Text>,
-        bits -> Nullable<Integer>,
-        color -> Nullable<Text>,
-        display_name -> Nullable<Text>,
+        bits -> Nullable<Integer>,  //Could use 0 to represent no bits but I think the option is clearer
+        color -> Nullable<Text>,    //TODO this is a rgb hex so make it bytes/int/whatever
+        display_name -> Text,
         emotes -> Nullable<Text>,
-        message_id -> Nullable<Text>,
         #[sql_name = "mod"]
         mod_ -> Nullable<Bool>,
-        room_id -> Nullable<Integer>,
-        tmi_sent_ts -> Nullable<Timestamp>,
-        user_id -> Nullable<Text>,
-        channel -> Nullable<Text>,
-        message -> Nullable<Text>,
-        raw_message -> Nullable<Text>,
+        room_id -> Integer,
+        tmi_sent_ts -> Timestamp,
+        user_id -> Text,
+        channel -> Text,
+        message -> Text,
+        raw_message -> Text,
     }
 }
