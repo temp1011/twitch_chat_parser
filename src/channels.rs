@@ -67,7 +67,7 @@ impl Iterator for ChannelPages {
 }
 
 //found on twitch.tv by looking at network requests in dev tools
-const CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+const CLIENT_ID: &str = "jzkbprff40iqj646a697cyrvl0zt2m6";
 const API_URL: &str = "https://api.twitch.tv/helix/";
 const MAX_PER_PAGE: u64 = 100;
 //TODO- lazy reusable request builder for best performance
@@ -97,6 +97,7 @@ pub fn top_connections(number: u64) -> Vec<String> {
         let ids: Vec<String> = page.data.into_iter().map(|x| x.user_id).collect();
         // The ChannelPages iterator already returns up to the max of this endpoint anyway so it's
         // OK to keep this in the loop
+        // TODO but it shouldn't unwrap
         let resp = UserResponse::get_login_names(ids).unwrap();
         let mut l: Vec<String> = resp
             .data
@@ -131,6 +132,8 @@ struct UserResponse {
 }
 
 impl UserResponse {
+    //TODO - Sometimes this seems to return fewer channels than requested. Maybe return an error
+    //for this too
     fn get_login_names(userids: Vec<String>) -> Result<UserResponse, Box<std::error::Error>> {
         let params: Vec<(&str, String)> = userids.into_iter().map(|s| ("id", s)).collect();
         Request::request("users", params)
