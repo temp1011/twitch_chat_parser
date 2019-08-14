@@ -80,9 +80,10 @@ impl TryFrom<Vec<Tag>> for TwitchTags {
                 }
                 "tmi-sent-ts" => {
                     ret.tmi_sent_ts = val
-                        .and_then(|s| s.parse::<u64>().ok()) //TODO might be nice to integrate this to error chain too
-                        .map(|v| DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(v)))
                         .ok_or(MyError::Parse("Timestamp not present"))?
+                        .parse::<u64>()
+                        .map_err(|_| MyError::Parse("timestamp wasn't a u64"))
+                        .map(|v| DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(v)))?
                 }
                 "user-id" => ret.user_id = val.ok_or(MyError::Parse("User id not present"))?,
                 _ => {}
