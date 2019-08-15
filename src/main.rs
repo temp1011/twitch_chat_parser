@@ -9,10 +9,12 @@ use irc::error::IrcError;
 
 use std::convert::TryFrom;
 use std::io::{Error, ErrorKind};
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
 
 mod types;
 use types::TwitchMessage;
-
+use error::MyError;
 mod channels;
 mod error;
 mod videos;
@@ -24,14 +26,33 @@ const MAX_CHANNELS: u64 = 300;
 //
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
-    let mut reactor = IrcReactor::new()?;
+    let db_conn = db::DB::connection().unwrap();
+    
+    //TODO loop? this will exit on first error.
+    let msg_recv = run_client()?;
+    //Tie together the channels
+    while let Ok(msg) = msg_recv.recv() {
+        if let Err(e) = db_conn.send(msg) {
+            return Err(MyError::Db(Box::new(e))); //TODO need 'other' error type
+        }
+    }
 
-    let conn = db::DB::connection().unwrap();
-    let client = setup_client(&mut reactor)?;
-    //TODO - use multiple clients for better parallelism
+    Ok(())
+}
+
+//TODO need to return join handle?
+fn run_client() -> Result<Receiver<TwitchMessage>, IrcError> {
+    let (send, recv) = channel::<TwitchMessage>();
+    
+    thread::spawn(move || {
+
+    let mut reactor = IrcReactor::new().unwrap();   //TODO errors
+    let client = setup_client(&mut reactor).expect("Failed to setup client");   //TODO errors
+    //TODO - use multiple clients for better parallelism, given that twitch seems to rate limit
+    //joining channels.
     reactor.register_client_with_handler(client, move |client, message| {
         if let Ok(t_msg) = TwitchMessage::try_from(&message) {
-            if let Err(e) = conn.send(t_msg) {
+            if let Err(e) = send.send(t_msg) {
                 Error::new(ErrorKind::Other, e);
             }
             return Ok(());
@@ -47,8 +68,10 @@ fn main() -> Result<(), error::MyError> {
         Ok(())
     });
 
-    reactor.run()?;
-    Ok(())
+    reactor.run();
+    });
+    Ok(recv)
+
 }
 
 fn setup_client(reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
