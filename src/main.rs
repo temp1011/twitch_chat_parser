@@ -18,6 +18,7 @@ use error::MyError;
 mod channels;
 mod error;
 mod videos;
+mod controller2;
 const MAX_CHANNELS: u64 = 300;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
@@ -31,7 +32,7 @@ fn main() -> Result<(), error::MyError> {
     //TODO loop? this will exit on first error.
     let msg_recv = run_client()?;
     //Tie together the channels
-    while let Ok(msg) = msg_recv.recv() {
+    while let Ok(msg) = msg_recv.recv() {   //TODO for msg in msg_recv?
         if let Err(e) = db_conn.send(msg) {
             return Err(MyError::Db(Box::new(e))); //TODO need 'other' error type
         }
@@ -43,7 +44,8 @@ fn main() -> Result<(), error::MyError> {
 //TODO need to return join handle?
 fn run_client() -> Result<Receiver<TwitchMessage>, IrcError> {
     let (send, recv) = channel::<TwitchMessage>();
-    
+   
+
     thread::spawn(move || {
 
     let mut reactor = IrcReactor::new().unwrap();   //TODO errors
@@ -77,19 +79,14 @@ fn run_client() -> Result<Receiver<TwitchMessage>, IrcError> {
 fn setup_client(reactor: &mut IrcReactor) -> Result<IrcClient, IrcError> {
     let mut config = Config::load("config.toml")?;
     let mut nick = "justinfan".to_string();
-    nick.push_str(&rand::random::<u16>().to_string());
-    config.nickname = Some(nick);
+    nick.push_str(&rand::random::<u32>().to_string());
 
-    config.server = Some("irc.chat.twitch.tv".to_string());
-
-    //TODO - how to custom config?
-    //    let config_number_channels: u64 = config.number_channels.unwrap_or(100);
-    let mut config_channels = config.channels.unwrap_or_default();
-    let mut top_channels =
-        channels::top_connections(MAX_CHANNELS.saturating_sub(config_channels.len() as u64));
-    config_channels.append(&mut top_channels);
-    config_channels.dedup();
-    config.channels = Some(config_channels);
+    let config = Config {
+        nickname: Some(nick),
+        server: Some("irc.chat.twitch.tv".to_owned()),
+        channels: Some(channels::top_connections(MAX_CHANNELS)),
+        ..Config::default()
+    };
     let client = reactor.prepare_client_and_connect(&config)?;
     client.send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])?;
     client.identify()?;
