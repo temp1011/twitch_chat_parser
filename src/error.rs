@@ -2,10 +2,10 @@
 #[derive(Debug)]
 pub enum MyError {
     Irc(irc::error::IrcError),
-    Db(Box<std::error::Error>),
+    Db(Box<dyn std::error::Error>),
     Parse(&'static str),
     DotEnv(std::env::VarError),
-    Other(Box<std::error::Error>),
+    Other(Box<dyn std::error::Error>),
 }
 
 impl From<irc::error::IrcError> for MyError {

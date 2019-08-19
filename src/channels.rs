@@ -33,7 +33,7 @@ impl ChannelResponse {
     fn get(
         number: u64,
         pagination: Option<String>,
-    ) -> Result<ChannelResponse, Box<std::error::Error>> {
+    ) -> Result<ChannelResponse, Box<dyn std::error::Error>> {
         let mut params: Vec<(&str, String)> = vec![("first", number.to_string())];
         if let Some(page) = pagination {
             params.push(("after", page));
@@ -73,7 +73,7 @@ const MAX_PER_PAGE: u64 = 100;
 //TODO- lazy reusable request builder for best performance
 //probably need to make this a struct for that
 trait Request {
-    fn request(endpoint: &str, params: Vec<(&str, String)>) -> Result<Self, Box<std::error::Error>>
+    fn request(endpoint: &str, params: Vec<(&str, String)>) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: std::marker::Sized + serde::de::DeserializeOwned,
     {
@@ -134,7 +134,7 @@ struct UserResponse {
 impl UserResponse {
     //TODO - Sometimes this seems to return fewer channels than requested. Maybe return an error
     //for this too
-    fn get_login_names(userids: Vec<String>) -> Result<UserResponse, Box<std::error::Error>> {
+    fn get_login_names(userids: Vec<String>) -> Result<UserResponse, Box<dyn std::error::Error>> {
         let params: Vec<(&str, String)> = userids.into_iter().map(|s| ("id", s)).collect();
         Request::request("users", params)
     }
