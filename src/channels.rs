@@ -73,7 +73,10 @@ const MAX_PER_PAGE: u64 = 100;
 //TODO- lazy reusable request builder for best performance
 //probably need to make this a struct for that
 trait Request {
-    fn request(endpoint: &str, params: Vec<(&str, String)>) -> Result<Self, Box<dyn std::error::Error>>
+    fn request(
+        endpoint: &str,
+        params: Vec<(&str, String)>,
+    ) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: std::marker::Sized + serde::de::DeserializeOwned,
     {
