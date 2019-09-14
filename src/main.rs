@@ -27,7 +27,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::mpsc::*;
 
-const MAX_CHANNELS: u64 = 2500;
+const MAX_CHANNELS: u64 = 1000;
 const CHANNELS_PER_CONTROLLER: u64 = 30;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
@@ -39,13 +39,6 @@ fn main() -> Result<(), error::MyError> {
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
     //TODO might want this as a set, but maybe can't do chunks then?
     let mut chans = channels::top_connections(MAX_CHANNELS);
-    if chans.len() < MAX_CHANNELS as usize {
-        eprintln!(
-            "API returned fewer channels than expected. Expected {}, got {}",
-            MAX_CHANNELS,
-            chans.len()
-        );
-    }
     //either my API usage/understanding is broken or twitch is returning a bad value here
     let mut seen_set = HashSet::<String>::with_capacity(chans.len());
     chans.retain(|c| {
@@ -58,6 +51,13 @@ fn main() -> Result<(), error::MyError> {
         }
         !seen
     });
+    if chans.len() < MAX_CHANNELS as usize {
+        eprintln!(
+            "API returned fewer channels than expected. Expected {}, got {}",
+            MAX_CHANNELS,
+            chans.len()
+        );
+    }
     assert_eq!(
         chans.len(),
         HashSet::<&String>::from_iter(chans.iter()).len()
@@ -127,4 +127,8 @@ mod test {
         assert_eq!(controller.list(), Vec::<String>::new());
     }
 
+    #[test]
+    fn test_refresh_channels_no_op() {
+
+    }
 }
