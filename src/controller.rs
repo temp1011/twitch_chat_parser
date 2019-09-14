@@ -141,6 +141,20 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
     controller
 }
 
+struct ClientController {
+    client: IrcClient,
+}
+
+impl ClientController {
+    fn handle_operation(&mut self, op: Operation) -> Res {
+        match op {
+            Operation::Join(chan) => self.client.send_join(chan).map(|_| None),
+            Operation::Part(chan) => self.client.send_part(chan).map(|_| None),
+            Operation::List => Ok(self.client.list_channels()),
+        }
+    }
+}
+
 fn setup_client(reactor: &mut IrcReactor, chans: Vec<String>) -> Result<IrcClient, IrcError> {
     let mut nick = "justinfan".to_string();
     nick.push_str(&rand::random::<u32>().to_string());

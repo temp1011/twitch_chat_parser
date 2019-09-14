@@ -19,6 +19,7 @@ use types::TwitchMessage;
 mod channels;
 mod controller;
 mod error;
+use controller::Controller;
 use controller::IrcController;
 use std::cmp;
 use std::sync::mpsc::*;
@@ -42,9 +43,9 @@ fn main() -> Result<(), error::MyError> {
     thread_rng().shuffle(&mut chans);
     //This could/should be Vec<Set>
     let chans_split: Vec<Vec<String>> = chans.chunks(CHANNELS_PER_CONTROLLER as usize).map(|c| c.to_vec()).collect();
-    let controllers: Vec<IrcController> = chans_split
+    let controllers: Vec<Controller> = chans_split
         .into_iter()
-        .map(|s| IrcController::init_with_sender(s, db_conn.clone()).unwrap())
+        .map(|s| Controller::init_with_sender(s, db_conn.clone()).unwrap())
         .collect();
 
     //NOTE: crashes, same issue as https://github.com/aatxe/irc/issues/174, possible solution is use more reactors with fewer channels each
@@ -54,7 +55,7 @@ fn main() -> Result<(), error::MyError> {
         thread::sleep(Duration::from_secs(30));
         let mut top_channels: HashSet<String> = HashSet::from_iter(channels::top_connections(MAX_CHANNELS).into_iter());
         
-        let mut temp: Vec<(&IrcController, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
+        let mut temp: Vec<(&Controller, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
         for (c, v) in &mut temp {
             for l in c.list() {
                 if top_channels.remove(&l) {
