@@ -20,7 +20,14 @@ mod channels;
 mod controller;
 mod error;
 use controller::IrcController;
+use std::cmp;
+use std::sync::mpsc::*;
+use std::collections::HashSet;
+use std::iter::FromIterator;
+use rand::{thread_rng, Rng};
+
 const MAX_CHANNELS: u64 = 300;
+const CHANNELS_PER_CONTROLLER: u64 = 30;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
@@ -28,50 +35,42 @@ const MAX_CHANNELS: u64 = 300;
 //
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
-    let db_conn = db::DB::connection().unwrap();
-
-    //TODO use init with sender
-    let (msg_recv, mut controller) = IrcController::init(channels::top_connections(MAX_CHANNELS))?;
-    //Tie together the channels
-    let handle = thread::spawn(move || {
-        while let Ok(msg) = msg_recv.recv() {
-            //TODO for msg in msg_recv?
-            if let Err(e) = db_conn.send(msg) {
-                return (); //Err(MyError::Db(Box::new(e))); //TODO need 'other' error type
-            }
-        }
-
-        ()
-    });
+    let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
+    //TODO might want this as a set, but maybe can't do chunks then?
+    let mut chans = channels::top_connections(MAX_CHANNELS);
+    //provide more even load of channels between controllers
+    thread_rng().shuffle(&mut chans);
+    //This could/should be Vec<Set>
+    let chans_split: Vec<Vec<String>> = chans.chunks(CHANNELS_PER_CONTROLLER as usize).map(|c| c.to_vec()).collect();
+    let controllers: Vec<IrcController> = chans_split
+        .into_iter()
+        .map(|s| IrcController::init_with_sender(s, db_conn.clone()).unwrap())
+        .collect();
 
     //NOTE: crashes, same issue as https://github.com/aatxe/irc/issues/174, possible solution is use more reactors with fewer channels each
-    //TODO load balancing: have y total channels and x reactors. For each figure out too leave,
+    //TODO load balancing: have y total channels and x reactors. For each figure out to leave,
     //then append to join to get back to original capacity.
     loop {
         thread::sleep(Duration::from_secs(30));
-        let current_channels = controller.list();
-        let top_channels = channels::top_connections(MAX_CHANNELS);
-        //TODO potentially n^2? Solvable with hashmap
-        //TODO see if clones necessary too
-        let to_join: Vec<String> = top_channels
-            .clone()
-            .into_iter()
-            .filter(|c| !current_channels.contains(c))
-            .collect();
-        let to_part: Vec<String> = current_channels
-            .clone()
-            .into_iter()
-            .filter(|c| !top_channels.contains(c))
-            .collect();
-        for c in to_join {
-            if let Err(e) = controller.join(c) {
-                //TODO handle result
-                println!("{:?}", e);
+        let mut top_channels: HashSet<String> = HashSet::from_iter(channels::top_connections(MAX_CHANNELS).into_iter());
+        
+        let mut temp: Vec<(&IrcController, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
+        for (c, v) in &mut temp {
+            for l in c.list() {
+                if top_channels.remove(&l) {
+                    v.push(l);
+                }
             }
         }
-        for c in to_part {
-            if let Err(e) = controller.part(c) {
-                println!("{:?}", e);
+        
+        let mut it = top_channels.drain();  //To join
+        for(c, v) in &mut temp {
+            if v.is_empty() {
+                continue;
+            }
+            for to_leave in v {
+                c.join(it.next().unwrap());
+                c.part(to_leave.to_string());
             }
         }
     }
