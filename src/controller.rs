@@ -23,9 +23,7 @@ pub struct Controller {
 
 impl Controller {
     //optionally supply channels to init config with. Does this need result?
-    pub fn init(
-        channels: Vec<String>,
-    ) -> Result<(Receiver<TwitchMessage>, Controller), IrcError> {
+    pub fn init(channels: Vec<String>) -> Result<(Receiver<TwitchMessage>, Controller), IrcError> {
         run_client(channels)
     }
 
@@ -169,4 +167,43 @@ fn setup_client(reactor: &mut IrcReactor, chans: Vec<String>) -> Result<IrcClien
     client.send_cap_req(&[irc::proto::caps::Capability::Custom("twitch.tv/tags")])?;
     client.identify()?;
     Ok(client)
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    pub struct TestController {
+        //the mutex here is a little awkward, but it's the best way I can think of to preserve the
+        //trait signatures while storing the data locally
+        chans: Mutex<HashSet<String>>,
+    }
+
+    impl IrcController for TestController {
+        fn execute(&self, op: Operation) -> Res {
+            let mut cs = self.chans.lock().unwrap();
+            match op {
+                Operation::Join(c) => {
+                    cs.insert(c);
+                    Ok(None)
+                }
+                Operation::Part(c) => {
+                    cs.remove(&c);
+                    Ok(None)
+                }
+                Operation::List => Ok(Some(cs.clone().into_iter().collect())),
+            }
+        }
+    }
+
+    impl TestController {
+        pub fn new() -> TestController {
+            TestController {
+                chans: Mutex::new(HashSet::new()),
+            }
+        }
+    }
+
 }

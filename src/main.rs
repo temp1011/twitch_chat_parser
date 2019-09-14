@@ -21,11 +21,11 @@ mod controller;
 mod error;
 use controller::Controller;
 use controller::IrcController;
+use rand::{thread_rng, Rng};
 use std::cmp;
-use std::sync::mpsc::*;
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use rand::{thread_rng, Rng};
+use std::sync::mpsc::*;
 
 const MAX_CHANNELS: u64 = 300;
 const CHANNELS_PER_CONTROLLER: u64 = 30;
@@ -42,7 +42,10 @@ fn main() -> Result<(), error::MyError> {
     //provide more even load of channels between controllers
     thread_rng().shuffle(&mut chans);
     //This could/should be Vec<Set>
-    let chans_split: Vec<Vec<String>> = chans.chunks(CHANNELS_PER_CONTROLLER as usize).map(|c| c.to_vec()).collect();
+    let chans_split: Vec<Vec<String>> = chans
+        .chunks(CHANNELS_PER_CONTROLLER as usize)
+        .map(|c| c.to_vec())
+        .collect();
     let controllers: Vec<Controller> = chans_split
         .into_iter()
         .map(|s| Controller::init_with_sender(s, db_conn.clone()).unwrap())
@@ -51,28 +54,51 @@ fn main() -> Result<(), error::MyError> {
     //NOTE: crashes, same issue as https://github.com/aatxe/irc/issues/174, possible solution is use more reactors with fewer channels each
     //TODO load balancing: have y total channels and x reactors. For each figure out to leave,
     //then append to join to get back to original capacity.
+
     loop {
         thread::sleep(Duration::from_secs(30));
-        let mut top_channels: HashSet<String> = HashSet::from_iter(channels::top_connections(MAX_CHANNELS).into_iter());
-        
-        let mut temp: Vec<(&Controller, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
-        for (c, v) in &mut temp {
-            for l in c.list() {
-                if top_channels.remove(&l) {
-                    v.push(l);
-                }
-            }
-        }
-        
-        let mut it = top_channels.drain();  //To join
-        for(c, v) in &mut temp {
-            if v.is_empty() {
-                continue;
-            }
-            for to_leave in v {
-                c.join(it.next().unwrap());
-                c.part(to_leave.to_string());
+        refresh_channels(&controllers);
+    }
+}
+
+fn refresh_channels(controllers: &[Controller]) {
+    let mut top_channels: HashSet<String> =
+        HashSet::from_iter(channels::top_connections(MAX_CHANNELS).into_iter());
+
+    let mut temp: Vec<(&Controller, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
+    for (c, v) in &mut temp {
+        for l in c.list() {
+            if top_channels.remove(&l) {
+                v.push(l);
             }
         }
     }
+
+    let mut it = top_channels.drain(); //To join
+    for (c, v) in &mut temp {
+        if v.is_empty() {
+            continue;
+        }
+        for to_leave in v {
+            c.join(it.next().unwrap());
+            c.part(to_leave.to_string());
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use controller::test::*;
+
+    #[test]
+    fn basic_test() {
+        let (_, controller) = Controller::init(Vec::new()).unwrap();
+        controller.join("a_channel".to_string());
+        assert_eq!(controller.list(), vec!["a_channel"]);
+
+        controller.part("a_channel".to_string());
+        assert_eq!(controller.list(), Vec::<String>::new());
+    }
+
 }
