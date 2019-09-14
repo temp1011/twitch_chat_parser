@@ -9,7 +9,7 @@ use std::env;
 use std::sync::mpsc;
 //TODO - handle errors better in this module
 
-const BATCH_SIZE: usize = 512;
+const BATCH_SIZE: usize = 1024;
 //wrapper over db connection to batch insert messages and make code a bit cleaner. Also allows
 //easier use of database while program is running since batching means the db isn't constantly
 //locked.
@@ -49,9 +49,13 @@ impl DB {
         while let Ok(v) = self.queue.1.recv() {
             self.batch.push(v);
             if self.batch.len() >= BATCH_SIZE {
-                if let Ok(num) = self.flush() {
-                    nr += num;
-                    println!("[{}] messages inserted: {}", Utc::now(), nr);
+                match self.flush() {
+                    Ok(num) => {
+                        nr += num;
+                        println!("[{}] messages inserted: {}", Utc::now(), nr);
+                    }
+                    Err(e) => {eprintln!("[{}] error flushing to db {:?}", Utc::now(), e);
+                    },
                 }
             }
         }
@@ -72,7 +76,7 @@ impl DB {
     fn insert(&mut self) -> QueryResult<usize> {
         let records: Vec<Message> = self.batch.drain(..).map(Message::from).collect();
 
-        diesel::insert_into(messages::table)
+        diesel::insert_or_ignore_into(messages::table)  //TODO - this shouldn't be necessary but somehow UUIDs are clashing, possibly channel balancing is broken, maybe something else
             .values(records)
             .execute(&self.conn)
     }

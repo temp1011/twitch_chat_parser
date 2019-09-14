@@ -27,7 +27,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::mpsc::*;
 
-const MAX_CHANNELS: u64 = 300;
+const MAX_CHANNELS: u64 = 2500;
 const CHANNELS_PER_CONTROLLER: u64 = 30;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
@@ -39,6 +39,30 @@ fn main() -> Result<(), error::MyError> {
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
     //TODO might want this as a set, but maybe can't do chunks then?
     let mut chans = channels::top_connections(MAX_CHANNELS);
+    if chans.len() < MAX_CHANNELS as usize {
+        eprintln!(
+            "API returned fewer channels than expected. Expected {}, got {}",
+            MAX_CHANNELS,
+            chans.len()
+        );
+    }
+    //either my API usage/understanding is broken or twitch is returning a bad value here
+    let mut seen_set = HashSet::<String>::with_capacity(chans.len());
+    chans.retain(|c| {
+        let seen = !seen_set.insert(c.to_string());
+        if seen {
+            eprintln!(
+                "channel {} was found twice in channels returned by API, removing duplicate",
+                c
+            );
+        }
+        !seen
+    });
+    assert_eq!(
+        chans.len(),
+        HashSet::<&String>::from_iter(chans.iter()).len()
+    ); //check there are no duplicates
+
     //provide more even load of channels between controllers
     thread_rng().shuffle(&mut chans);
     //This could/should be Vec<Set>
@@ -61,6 +85,8 @@ fn main() -> Result<(), error::MyError> {
     }
 }
 
+//TODO needs change to soak extra channels of the API doesn't behave at first but starts behaving
+//itself later (ie top_channels.len() > sum of controllers.list().len())
 fn refresh_channels(controllers: &[Controller]) {
     let mut top_channels: HashSet<String> =
         HashSet::from_iter(channels::top_connections(MAX_CHANNELS).into_iter());

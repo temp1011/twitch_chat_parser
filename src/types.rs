@@ -14,7 +14,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use uuid::Uuid;
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TwitchTags {
     pub badge_info: Option<String>,
     pub badges: Option<Vec<String>>,
@@ -96,7 +96,7 @@ impl TryFrom<Vec<Tag>> for TwitchTags {
 fn map_to_int(s: String) -> i32 {
     s.parse::<i32>().unwrap_or(0)
 }
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Eq, PartialEq)]
 pub struct TwitchMessage {
     pub tags: TwitchTags,
     pub channel: String,
