@@ -54,8 +54,9 @@ impl DB {
                         nr += num;
                         println!("[{}] messages inserted: {}", Utc::now(), nr);
                     }
-                    Err(e) => {eprintln!("[{}] error flushing to db {:?}", Utc::now(), e);
-                    },
+                    Err(e) => {
+                        eprintln!("[{}] error flushing to db {:?}", Utc::now(), e);
+                    }
                 }
             }
         }
@@ -76,7 +77,7 @@ impl DB {
     fn insert(&mut self) -> QueryResult<usize> {
         let records: Vec<Message> = self.batch.drain(..).map(Message::from).collect();
 
-        diesel::insert_or_ignore_into(messages::table)  //TODO - this shouldn't be necessary but somehow UUIDs are clashing, possibly channel balancing is broken, maybe something else
+        diesel::insert_into(messages::table)
             .values(records)
             .execute(&self.conn)
     }
