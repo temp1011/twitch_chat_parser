@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 type Res = Result<Option<Vec<String>>, IrcError>;
 
 pub struct Controller {
-    client: Arc<Mutex<IrcClient>>,
+    client: IrcClient,
     sender: Sender<TwitchMessage>,
 }
 
@@ -41,20 +41,16 @@ impl Controller {
 
 impl IrcController for Controller {
     fn join(&self, channel: String) -> Result<(), IrcError> {
-        println!("joining, {}", channel);
-        let guard = self.client.lock().unwrap();
-        (*guard).send_join(channel)
+        self.client.send_join(channel)
     }
 
     //TODO maybe return option here
     fn list(&self) -> Option<Vec<String>> {
-        let guard = self.client.lock().unwrap();
-        (*guard).list_channels()
+        self.client.list_channels()
     }
 
     fn part(&self, channel: String) -> Result<(), IrcError> {
-        let guard = self.client.lock().unwrap();
-        (*guard).send_part(channel)
+        self.client.send_part(channel)
     }
 
     fn execute(&self, op: Operation) -> Res {
@@ -105,19 +101,16 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
     let (tx, rx) = mpsc::unbounded::<Operation>();
     let (res_sender, res_receiver) = channel::<Res>();
 
-    let client = Arc::new(Mutex::new(
-        setup_client(chans).expect("Failed to setup client"),
-    )); //TODO errors and see docs: https://docs.rs/irc/0.13.6/irc/client/struct.IrcClient.html#method.from_config could panic a lot
+    let client = setup_client(chans).expect("Failed to setup client");
     let s = send.clone();
 
-    let c = Arc::clone(&client);
-    let d = Arc::clone(&client);
+
+    let another_client = client.clone();
     thread::spawn(move || {
         //TODO - use multiple clients for better parallelism, given that twitch seems to rate limit
         //joining channels.
 
-        let mut handler = move |c: Arc<Mutex<IrcClient>>, message: irc::proto::message::Message| {
-            let guard = c.lock().unwrap();
+        let mut handler = move |client: &IrcClient, message: irc::proto::message::Message| {
             if let Ok(t_msg) = TwitchMessage::try_from(&message) {
                 if let Err(e) = s.send(t_msg) {
                     Error::new(ErrorKind::Other, e);
@@ -127,7 +120,7 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
 
             match message.command {
                 Command::PING(_, msg) => {
-                    (*guard).send_pong(msg.unwrap_or_else(String::new))?;
+                    client.send_pong(msg.unwrap_or_else(String::new))?;
                 }
                 Command::JOIN(ref chan, _, _) => println!("joined {}", chan),
                 Command::PART(ref chan, _) => println!("left {}", chan),
@@ -137,15 +130,13 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
         };
 
         let mut reactor = IrcReactor::new().unwrap(); //TODO errors
-        let guard: MutexGuard<IrcClient> = c.lock().unwrap();
-        reactor.register_future((*guard).stream().for_each(move |message| {
-            let e = Arc::clone(&d);
-        handler(e, message)}));
+        reactor.register_future(another_client.stream().for_each(move |message| {
+        handler(&another_client, message)}));
         reactor.run();
     });
 
     let controller = Controller {
-        client: Arc::clone(&client),
+        client: client,
         sender: send.clone(),
     };
 

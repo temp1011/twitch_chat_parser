@@ -120,10 +120,13 @@ mod test {
     #[test]
     fn basic_test() {
         let (_, controller) = Controller::init(Vec::new()).unwrap();
-        controller.join("a_channel".to_string()).unwrap();
-        assert_eq!(controller.list().unwrap(), vec!["a_channel"]);
+        let top_channel = channels::top_connections(1).get(0).unwrap().to_string();
+        controller.join(top_channel.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(2));  //TODO only added to joined list when message received from server
+        assert_eq!(controller.list(), Some(vec![top_channel.clone()]));
 
-        controller.part("a_channel".to_string()).unwrap();
+        controller.part(top_channel.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(2));  //TODO only added to joined list when message received from server
         assert_eq!(controller.list().unwrap(), Vec::<String>::new());
     }
 
