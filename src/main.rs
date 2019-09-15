@@ -93,7 +93,7 @@ fn refresh_channels(controllers: &[Controller]) {
 
     let mut temp: Vec<(&Controller, Vec<String>)> = controllers.iter().zip(Vec::new()).collect();
     for (c, v) in &mut temp {
-        for l in c.list() {
+        for l in c.list().unwrap() {
             if top_channels.remove(&l) {
                 v.push(l);
             }
@@ -120,15 +120,13 @@ mod test {
     #[test]
     fn basic_test() {
         let (_, controller) = Controller::init(Vec::new()).unwrap();
-        controller.join("a_channel".to_string());
-        assert_eq!(controller.list(), vec!["a_channel"]);
+        controller.join("a_channel".to_string()).unwrap();
+        assert_eq!(controller.list().unwrap(), vec!["a_channel"]);
 
-        controller.part("a_channel".to_string());
-        assert_eq!(controller.list(), Vec::<String>::new());
+        controller.part("a_channel".to_string()).unwrap();
+        assert_eq!(controller.list().unwrap(), Vec::<String>::new());
     }
 
     #[test]
-    fn test_refresh_channels_no_op() {
-
-    }
+    fn test_refresh_channels_no_op() {}
 }
