@@ -119,16 +119,16 @@ mod test {
 
     #[test]
     fn basic_test() {
-        let (_, controller) = Controller::init(Vec::new()).unwrap();
-        controller.join("a_channel".to_string());
-        assert_eq!(controller.list(), vec!["a_channel"]);
-
-        controller.part("a_channel".to_string());
+        let (r, controller) = Controller::init(Vec::new()).unwrap();
+        let top_channel = channels::top_connections(1).get(0).unwrap().to_string();
+        controller.join(top_channel.clone());
+        std::thread::sleep(std::time::Duration::from_secs(2)); //TODO - list only updated when join message received from server
+        assert!(!controller.list().is_empty());
+        controller.part(top_channel);
+        std::thread::sleep(std::time::Duration::from_secs(2)); //TODO - list only updated when join message received from server
         assert_eq!(controller.list(), Vec::<String>::new());
     }
 
     #[test]
-    fn test_refresh_channels_no_op() {
-
-    }
+    fn test_refresh_channels_no_op() {}
 }

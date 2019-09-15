@@ -146,14 +146,8 @@ struct ClientController {
 impl ClientController {
     fn handle_operation(&mut self, op: Operation) -> Res {
         match op {
-            Operation::Join(chan) => {
-                println!("joined {}", chan);
-                self.client.send_join(chan).map(|_| None)
-            }
-            Operation::Part(chan) => {
-                println!("left {}", chan);
-                self.client.send_part(chan).map(|_| None)
-            }
+            Operation::Join(chan) => self.client.send_join(chan).map(|_| None),
+            Operation::Part(chan) => self.client.send_part(chan).map(|_| None),
             Operation::List => Ok(self.client.list_channels()),
         }
     }
