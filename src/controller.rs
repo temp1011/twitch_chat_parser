@@ -78,7 +78,6 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
     let client = setup_client(chans).expect("Failed to setup client");
     let s = send.clone();
 
-
     let another_client = client.clone();
     thread::spawn(move || {
         let handler = move |client: &IrcClient, message: irc::proto::message::Message| {
@@ -133,8 +132,10 @@ fn setup_client(chans: Vec<String>) -> Result<IrcClient, IrcError> {
 pub mod test {
     use super::*;
     use std::collections::HashSet;
+    use std::iter::FromIterator;
     use std::sync::Mutex;
 
+    #[derive(Debug)]
     pub struct TestController {
         //the mutex here is a little awkward, but it's the best way I can think of to preserve the
         //trait signatures while storing the data locally
@@ -142,7 +143,6 @@ pub mod test {
     }
 
     impl IrcController for TestController {
-
         fn join(&self, channel: String) -> Result<(), IrcError> {
             self.chans.lock().unwrap().insert(channel);
             Ok(())
@@ -162,6 +162,12 @@ pub mod test {
         pub fn new() -> TestController {
             TestController {
                 chans: Mutex::new(HashSet::new()),
+            }
+        }
+
+        pub fn init(channels: Vec<String>) -> TestController {
+            TestController {
+                chans: Mutex::new(HashSet::from_iter(channels.into_iter())),
             }
         }
     }
