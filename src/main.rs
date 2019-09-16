@@ -100,8 +100,15 @@ fn refresh_channels_inner(controllers: &[impl IrcController], channels: Vec<Stri
     let mut it = top_channels.drain(); //To join
     for (i, v) in to_leave.iter().enumerate() {
         for leaving in v {
-            controllers[i].join(it.next().unwrap());
-            controllers[i].part(leaving.to_string());
+            //because of the API issues the length of the iterator can be shorter than the length
+            //of the channels to leave
+            match it.next() {
+                Some(c) => {
+                    controllers[i].join(c);
+                    controllers[i].part(leaving.to_string());
+                }
+                None => break,
+            }
         }
     }
 }
@@ -185,5 +192,17 @@ mod test {
         let new_channels: Vec<Vec<_>> = (300..400).map(|i| vec![i.to_string()]).collect();
         assert_eq!(channels.len(), new_channels.len());
         assert_refresh_works(channels, new_channels);
+    }
+
+    #[test]
+    fn simulate_api_issues_refresh() {
+        let channels: Vec<Vec<_>> = (0..100).map(|i| vec![i.to_string()]).collect();
+        let new_channels: Vec<_> = (10..101).map(|i| i.to_string()).collect();
+        let controllers: Vec<_> = channels
+            .clone()
+            .into_iter()
+            .map(|v| TestController::init(v))
+            .collect();
+        refresh_channels_inner(&controllers, new_channels);
     }
 }
