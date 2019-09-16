@@ -4,17 +4,11 @@ extern crate diesel;
 mod db;
 mod models;
 mod schema;
-use irc::client::prelude::*;
-use irc::error::IrcError;
 
-use std::convert::TryFrom;
-use std::io::{Error, ErrorKind};
-use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::Duration;
 
 mod types;
-use error::MyError;
 use types::TwitchMessage;
 mod channels;
 mod controller;
@@ -22,7 +16,6 @@ mod error;
 use controller::Controller;
 use controller::IrcController;
 use rand::{thread_rng, Rng};
-use std::cmp;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::mpsc::*;
@@ -122,11 +115,11 @@ mod test {
         let (_, controller) = Controller::init(Vec::new()).unwrap();
         let top_channel = channels::top_connections(1).get(0).unwrap().to_string();
         controller.join(top_channel.clone()).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(2));  //TODO only added to joined list when message received from server
+        std::thread::sleep(std::time::Duration::from_secs(1));  //TODO only added to joined list when message received from server
         assert_eq!(controller.list(), Some(vec![top_channel.clone()]));
 
         controller.part(top_channel.clone()).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(2));  //TODO only added to joined list when message received from server
+        std::thread::sleep(std::time::Duration::from_secs(1));  //TODO only added to joined list when message received from server
         assert_eq!(controller.list().unwrap(), Vec::<String>::new());
     }
 

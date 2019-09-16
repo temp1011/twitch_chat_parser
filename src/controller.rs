@@ -1,20 +1,14 @@
-use futures::sync::mpsc;
-use futures::sync::mpsc::UnboundedReceiver;
 use irc::client::prelude::*;
 use irc::error::IrcError;
 
-use futures::sync::mpsc::UnboundedSender;
 use std::convert::TryFrom;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
-use std::time::Duration;
 
 use crate::types::TwitchMessage;
-use std::sync::{Arc, Mutex, MutexGuard};
 
-type Res = Result<Option<Vec<String>>, IrcError>;
-
+//TODO register many clients on the same reactor
 pub struct Controller {
     client: IrcClient,
     sender: Sender<TwitchMessage>,
@@ -52,35 +46,18 @@ impl IrcController for Controller {
     fn part(&self, channel: String) -> Result<(), IrcError> {
         self.client.send_part(channel)
     }
-
-    fn execute(&self, op: Operation) -> Res {
-        Ok(None) //TODO
-    }
 }
 
 pub trait IrcController {
-    //note join also takes comma separated list
-    fn join(&self, channel: String) -> Result<(), IrcError> {
-        self.execute(Operation::Join(channel)).map(|_| ())
-    }
+    //note join also takes comma separated list in irc api
+    fn join(&self, channel: String) -> Result<(), IrcError>;
 
     //will I need to store channels separately or is there a way in irc to get this?
-    fn list(&self) -> Option<Vec<String>> {
-        self.execute(Operation::List).unwrap()
-    }
+    //update: storing means less latency but more problems if connection fails
+    fn list(&self) -> Option<Vec<String>>;
 
     //return left channel. return error if not connected to this channel.
-    fn part(&self, channel: String) -> Result<(), IrcError> {
-        self.execute(Operation::Part(channel)).map(|_| ())
-    }
-
-    fn execute(&self, op: Operation) -> Res;
-}
-
-enum Operation {
-    Join(String),
-    Part(String),
-    List,
+    fn part(&self, channel: String) -> Result<(), IrcError>;
 }
 
 //TODO need to return join handle?
@@ -98,19 +75,13 @@ fn run_client_with_sender(
 }
 
 fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controller {
-    let (tx, rx) = mpsc::unbounded::<Operation>();
-    let (res_sender, res_receiver) = channel::<Res>();
-
     let client = setup_client(chans).expect("Failed to setup client");
     let s = send.clone();
 
 
     let another_client = client.clone();
     thread::spawn(move || {
-        //TODO - use multiple clients for better parallelism, given that twitch seems to rate limit
-        //joining channels.
-
-        let mut handler = move |client: &IrcClient, message: irc::proto::message::Message| {
+        let handler = move |client: &IrcClient, message: irc::proto::message::Message| {
             if let Ok(t_msg) = TwitchMessage::try_from(&message) {
                 if let Err(e) = s.send(t_msg) {
                     Error::new(ErrorKind::Other, e);
@@ -130,8 +101,7 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
         };
 
         let mut reactor = IrcReactor::new().unwrap(); //TODO errors
-        reactor.register_future(another_client.stream().for_each(move |message| {
-        handler(&another_client, message)}));
+        reactor.register_client_with_handler(another_client, handler);
         reactor.run();
     });
 
@@ -141,26 +111,6 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
     };
 
     controller
-}
-
-struct ClientController {
-    client: IrcClient,
-}
-
-impl ClientController {
-    fn handle_operation(&mut self, op: Operation) -> Res {
-        match op {
-            Operation::Join(chan) => {
-                println!("joined {}", chan);
-                self.client.send_join(chan).map(|_| None)
-            }
-            Operation::Part(chan) => {
-                println!("left {}", chan);
-                self.client.send_part(chan).map(|_| None)
-            }
-            Operation::List => Ok(self.client.list_channels()),
-        }
-    }
 }
 
 fn setup_client(chans: Vec<String>) -> Result<IrcClient, IrcError> {
@@ -192,19 +142,19 @@ pub mod test {
     }
 
     impl IrcController for TestController {
-        fn execute(&self, op: Operation) -> Res {
-            let mut cs = self.chans.lock().unwrap();
-            match op {
-                Operation::Join(c) => {
-                    cs.insert(c);
-                    Ok(None)
-                }
-                Operation::Part(c) => {
-                    cs.remove(&c);
-                    Ok(None)
-                }
-                Operation::List => Ok(Some(cs.clone().into_iter().collect())),
-            }
+
+        fn join(&self, channel: String) -> Result<(), IrcError> {
+            self.chans.lock().unwrap().insert(channel);
+            Ok(())
+        }
+
+        fn part(&self, channel: String) -> Result<(), IrcError> {
+            self.chans.lock().unwrap().remove(&channel);
+            Ok(())
+        }
+
+        fn list(&self) -> Option<Vec<String>> {
+            Some(self.chans.lock().unwrap().clone().into_iter().collect())
         }
     }
 
