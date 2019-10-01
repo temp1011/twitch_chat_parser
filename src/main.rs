@@ -15,6 +15,7 @@ mod controller;
 mod error;
 use controller::Controller;
 use controller::IrcController;
+use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -30,7 +31,7 @@ const CHANNELS_PER_CONTROLLER: u64 = 30;
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
-    let mut chans = cleanup_channels(channels::top_connections(MAX_CHANNELS));
+    let chans = cleanup_channels(channels::top_connections(MAX_CHANNELS));
 
     let controllers = ControllerGroup::init_simple(chans, CHANNELS_PER_CONTROLLER, db_conn.clone());
     loop {
@@ -42,14 +43,14 @@ fn main() -> Result<(), error::MyError> {
 //having to box here is unfortunate, but it's the only way to inject for testing that I could work
 //out that the type system accepts
 struct ControllerGroup {
-    controllers: Vec<Box<IrcController>>,
+    controllers: Vec<Box<dyn IrcController>>,
     max_channels: u64,
     channels_per_controller: u64,
 }
 
 impl ControllerGroup {
     fn init(
-        mut chans: Vec<String>,
+        chans: Vec<String>,
         max_channels: u64,
         channels_per_controller: u64,
         conn: Sender<TwitchMessage>,
@@ -68,9 +69,10 @@ impl ControllerGroup {
         max_channels: u64,
         channels_per_controller: u64,
         conn: Sender<TwitchMessage>,
-        constructor: fn(Vec<String>, Sender<TwitchMessage>) -> Box<IrcController>,
+        constructor: fn(Vec<String>, Sender<TwitchMessage>) -> Box<dyn IrcController>,
     ) -> ControllerGroup {
-        thread_rng().shuffle(&mut chans);
+        let mut rng = thread_rng();
+        chans.shuffle(&mut rng);
         let chans_split: Vec<Vec<String>> = chans
             .chunks(channels_per_controller as usize)
             .map(|c| c.to_vec())
@@ -88,7 +90,7 @@ impl ControllerGroup {
     }
 
     fn init_simple(
-        mut channels: Vec<String>,
+        channels: Vec<String>,
         channels_per_controller: u64,
         conn: Sender<TwitchMessage>,
     ) -> ControllerGroup {
@@ -129,7 +131,7 @@ fn cleanup_channels(mut chans: Vec<String>) -> Vec<String> {
     chans
 }
 
-fn refresh_channels(controllers: &[Box<IrcController>]) {
+fn refresh_channels(controllers: &[Box<dyn IrcController>]) {
     refresh_channels_inner(controllers, channels::top_connections(MAX_CHANNELS))
 }
 
@@ -140,7 +142,7 @@ fn refresh_channels(controllers: &[Box<IrcController>]) {
 ///3. If the API happens to return a higher (closer to expected) number of channels  than it did
 ///   last time then join these
 ///   too
-fn refresh_channels_inner(controllers: &[Box<IrcController>], channels: Vec<String>) {
+fn refresh_channels_inner(controllers: &[Box<dyn IrcController>], channels: Vec<String>) {
     let mut top_channels: HashSet<String> = HashSet::from_iter(channels.into_iter());
 
     let mut to_leave: Vec<Vec<_>> = (0..controllers.len()).map(|_| Vec::new()).collect();
@@ -186,14 +188,16 @@ mod test {
 
     //convenience
     impl ControllerGroup {
-    
-    fn init_test(
-        mut channels: Vec<String>,
-        channels_per_controller: u64,
-    ) -> ControllerGroup {
-        let chans_length = channels.len() as u64;
-        Self::init_inner(channels, chans_length, channels_per_controller, channel().0, |c, _| Box::new(TestController::init(c)))
-    }
+        fn init_test(channels: Vec<String>, channels_per_controller: u64) -> ControllerGroup {
+            let chans_length = channels.len() as u64;
+            Self::init_inner(
+                channels,
+                chans_length,
+                channels_per_controller,
+                channel().0,
+                |c, _| Box::new(TestController::init(c)),
+            )
+        }
     }
 
     #[test]
@@ -216,14 +220,6 @@ mod test {
         assert_eq!(controller.list(), Some(vec!["a_channel".to_string()]));
     }
 
-    fn channel_list(controllers: &[impl IrcController]) -> Vec<String> {
-        controllers
-            .iter()
-            .map(|c| c.list().unwrap())
-            .flat_map(|v| v.into_iter())
-            .collect()
-    }
-
     //TODO might be nice to have a property test here
     fn assert_refresh_works(initial: ControllerGroup, final_channels: Vec<String>) {
         refresh_channels_inner(&initial.controllers, final_channels.clone());
@@ -233,11 +229,7 @@ mod test {
             HashSet::<String>::from_iter(refresh_channels.clone().into_iter());
         assert_eq!(refresh_channels.len(), refresh_channels_set.len());
         assert_eq!(
-            HashSet::from_iter(
-                final_channels
-                    .clone()
-                    .into_iter()
-            ),
+            HashSet::from_iter(final_channels.clone().into_iter()),
             refresh_channels_set
         );
     }
@@ -245,7 +237,10 @@ mod test {
     #[test]
     fn test_refresh_channels_no_op() {
         let new_channels: Vec<_> = (0..10).map(|i| i.to_string()).collect();
-        assert_refresh_works(ControllerGroup::init_test(new_channels.clone(), 2), new_channels);
+        assert_refresh_works(
+            ControllerGroup::init_test(new_channels.clone(), 2),
+            new_channels,
+        );
     }
 
     #[test]
