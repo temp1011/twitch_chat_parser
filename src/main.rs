@@ -8,6 +8,9 @@ mod schema;
 use std::thread;
 use std::time::Duration;
 
+use std::env;
+use dotenv::dotenv;
+
 mod types;
 use types::TwitchMessage;
 mod channels;
@@ -16,13 +19,10 @@ mod error;
 use controller::Controller;
 use controller::IrcController;
 use rand::seq::SliceRandom;
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::mpsc::*;
-
-const MAX_CHANNELS: u64 = 1000;
-const CHANNELS_PER_CONTROLLER: u64 = 30;
 
 //TODO - IrcError doesn't have from Box<Error>, so how to handle multiple types?
 //it has inner field containing error itself. Not sure how to wrap this to include normal errors
@@ -30,13 +30,18 @@ const CHANNELS_PER_CONTROLLER: u64 = 30;
 //
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
-    let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
-    let chans = cleanup_channels(channels::top_connections(MAX_CHANNELS));
+    dotenv().ok();
+    let max_channels = env::var("MAX_CHANNELS").unwrap().parse::<u64>().unwrap();
+    let channels_per_controller = env::var("CHANNELS_PER_CONTROLLER").unwrap().parse::<u64>().unwrap();
+    let refresh_interval = env::var("REFRESH_INTERVAL").unwrap().parse::<u64>().unwrap();
 
-    let controllers = ControllerGroup::init_simple(chans, CHANNELS_PER_CONTROLLER, db_conn.clone());
+    let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
+    let chans = cleanup_channels(channels::top_connections(max_channels), max_channels);
+
+    let controllers = ControllerGroup::init_simple(chans, channels_per_controller, db_conn.clone());
     loop {
-        thread::sleep(Duration::from_secs(30));
-        refresh_channels(&controllers.controllers);
+        thread::sleep(Duration::from_secs(refresh_interval));
+        refresh_channels(&controllers);
     }
 }
 
@@ -103,7 +108,7 @@ impl ControllerGroup {
     }
 }
 
-fn cleanup_channels(mut chans: Vec<String>) -> Vec<String> {
+fn cleanup_channels(mut chans: Vec<String>, expected: u64) -> Vec<String> {
     let mut seen_set = HashSet::<String>::with_capacity(chans.len());
 
     chans.retain(|c| {
@@ -116,10 +121,10 @@ fn cleanup_channels(mut chans: Vec<String>) -> Vec<String> {
         }
         !seen
     });
-    if chans.len() < MAX_CHANNELS as usize {
+    if chans.len() < expected as usize {
         eprintln!(
             "API returned fewer channels than expected. Expected {}, got {}",
-            MAX_CHANNELS,
+            expected,
             chans.len()
         );
     }
@@ -131,8 +136,8 @@ fn cleanup_channels(mut chans: Vec<String>) -> Vec<String> {
     chans
 }
 
-fn refresh_channels(controllers: &[Box<dyn IrcController>]) {
-    refresh_channels_inner(controllers, channels::top_connections(MAX_CHANNELS))
+fn refresh_channels(controllers: &ControllerGroup) {
+    refresh_channels_inner(controllers, channels::top_connections(controllers.max_channels))
 }
 
 ///split out for testing purposes
@@ -142,9 +147,9 @@ fn refresh_channels(controllers: &[Box<dyn IrcController>]) {
 ///3. If the API happens to return a higher (closer to expected) number of channels  than it did
 ///   last time then join these
 ///   too
-fn refresh_channels_inner(controllers: &[Box<dyn IrcController>], channels: Vec<String>) {
+fn refresh_channels_inner(controllerGroup: &ControllerGroup, channels: Vec<String>) {
     let mut top_channels: HashSet<String> = HashSet::from_iter(channels.into_iter());
-
+    let controllers = &controllerGroup.controllers;
     let mut to_leave: Vec<Vec<_>> = (0..controllers.len()).map(|_| Vec::new()).collect();
     for (i, c) in controllers.iter().enumerate() {
         for l in c.list().unwrap() {
@@ -170,7 +175,7 @@ fn refresh_channels_inner(controllers: &[Box<dyn IrcController>], channels: Vec<
     }
 
     for (i, c) in controllers.iter().enumerate() {
-        while c.list().unwrap().len() < CHANNELS_PER_CONTROLLER as usize {
+        while c.list().unwrap().len() < controllerGroup.channels_per_controller as usize {
             match it.next() {
                 Some(ch) => {
                     controllers[i].join(ch);
@@ -222,7 +227,7 @@ mod test {
 
     //TODO might be nice to have a property test here
     fn assert_refresh_works(initial: ControllerGroup, final_channels: Vec<String>) {
-        refresh_channels_inner(&initial.controllers, final_channels.clone());
+        refresh_channels_inner(&initial, final_channels.clone());
         let refresh_channels: Vec<String> = initial.list_channels().into_iter().flatten().collect();
 
         let refresh_channels_set =
@@ -266,6 +271,6 @@ mod test {
         let channels: Vec<_> = (0..100).map(|i| i.to_string()).collect();
         let group = ControllerGroup::init_test(channels, 10);
         let new_channels: Vec<_> = (10..101).map(|i| i.to_string()).collect();
-        refresh_channels_inner(&group.controllers, new_channels);
+        refresh_channels_inner(&group, new_channels);
     }
 }
