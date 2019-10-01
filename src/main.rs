@@ -30,10 +30,80 @@ const CHANNELS_PER_CONTROLLER: u64 = 30;
 //my errors here are awful...
 fn main() -> Result<(), error::MyError> {
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
-    //TODO might want this as a set, but maybe can't do chunks then?
-    let mut chans = channels::top_connections(MAX_CHANNELS);
-    //either my API usage/understanding is broken or twitch is returning a bad value here
+    let mut chans = cleanup_channels(channels::top_connections(MAX_CHANNELS));
+
+    let controllers = ControllerGroup::init_simple(chans, CHANNELS_PER_CONTROLLER, db_conn.clone());
+    loop {
+        thread::sleep(Duration::from_secs(30));
+        refresh_channels(&controllers.controllers);
+    }
+}
+
+//having to box here is unfortunate, but it's the only way to inject for testing that I could work
+//out that the type system accepts
+struct ControllerGroup {
+    controllers: Vec<Box<IrcController>>,
+    max_channels: u64,
+    channels_per_controller: u64,
+}
+
+impl ControllerGroup {
+    fn init(
+        mut chans: Vec<String>,
+        max_channels: u64,
+        channels_per_controller: u64,
+        conn: Sender<TwitchMessage>,
+    ) -> ControllerGroup {
+        Self::init_inner(
+            chans,
+            max_channels,
+            channels_per_controller,
+            conn,
+            |s, conn| Box::new(Controller::init_with_sender(s, conn).unwrap()),
+        )
+    }
+
+    fn init_inner(
+        mut chans: Vec<String>,
+        max_channels: u64,
+        channels_per_controller: u64,
+        conn: Sender<TwitchMessage>,
+        constructor: fn(Vec<String>, Sender<TwitchMessage>) -> Box<IrcController>,
+    ) -> ControllerGroup {
+        thread_rng().shuffle(&mut chans);
+        let chans_split: Vec<Vec<String>> = chans
+            .chunks(channels_per_controller as usize)
+            .map(|c| c.to_vec())
+            .collect();
+        let controllers: Vec<_> = chans_split
+            .into_iter()
+            .map(|s| constructor(s, conn.clone()))
+            .collect();
+
+        ControllerGroup {
+            controllers,
+            max_channels,
+            channels_per_controller,
+        }
+    }
+
+    fn init_simple(
+        mut channels: Vec<String>,
+        channels_per_controller: u64,
+        conn: Sender<TwitchMessage>,
+    ) -> ControllerGroup {
+        let chans_length = channels.len() as u64;
+        Self::init(channels, chans_length, channels_per_controller, conn)
+    }
+
+    fn list_channels(&self) -> Vec<Vec<String>> {
+        self.controllers.iter().map(|c| c.list().unwrap()).collect()
+    }
+}
+
+fn cleanup_channels(mut chans: Vec<String>) -> Vec<String> {
     let mut seen_set = HashSet::<String>::with_capacity(chans.len());
+
     chans.retain(|c| {
         let seen = !seen_set.insert(c.to_string());
         if seen {
@@ -56,36 +126,21 @@ fn main() -> Result<(), error::MyError> {
         HashSet::<&String>::from_iter(chans.iter()).len()
     ); //check there are no duplicates
 
-    //provide more even load of channels between controllers
-    thread_rng().shuffle(&mut chans);
-    //This could/should be Vec<Set>
-    let chans_split: Vec<Vec<String>> = chans
-        .chunks(CHANNELS_PER_CONTROLLER as usize)
-        .map(|c| c.to_vec())
-        .collect();
-    let controllers: Vec<Controller> = chans_split
-        .into_iter()
-        .map(|s| Controller::init_with_sender(s, db_conn.clone()).unwrap())
-        .collect();
-
-    //NOTE: crashes, same issue as https://github.com/aatxe/irc/issues/174, possible solution is use more reactors with fewer channels each
-    //TODO load balancing: have y total channels and x reactors. For each figure out to leave,
-    //then append to join to get back to original capacity.
-
-    loop {
-        thread::sleep(Duration::from_secs(30));
-        refresh_channels(&controllers);
-    }
+    chans
 }
 
-//TODO needs change to soak extra channels of the API doesn't behave at first but starts behaving
-//itself later (ie top_channels.len() > sum of controllers.list().len())
-fn refresh_channels(controllers: &[impl IrcController]) {
+fn refresh_channels(controllers: &[Box<IrcController>]) {
     refresh_channels_inner(controllers, channels::top_connections(MAX_CHANNELS))
 }
 
-//split out for testing purposes
-fn refresh_channels_inner(controllers: &[impl IrcController], channels: Vec<String>) {
+///split out for testing purposes
+///There are 3 loops over all joined channels:
+///1. Mark channels not returned in API to be left
+///2. for the channels returned by the API, swap out a channel to be left for a fresh one
+///3. If the API happens to return a higher (closer to expected) number of channels  than it did
+///   last time then join these
+///   too
+fn refresh_channels_inner(controllers: &[Box<IrcController>], channels: Vec<String>) {
     let mut top_channels: HashSet<String> = HashSet::from_iter(channels.into_iter());
 
     let mut to_leave: Vec<Vec<_>> = (0..controllers.len()).map(|_| Vec::new()).collect();
@@ -111,12 +166,35 @@ fn refresh_channels_inner(controllers: &[impl IrcController], channels: Vec<Stri
             }
         }
     }
+
+    for (i, c) in controllers.iter().enumerate() {
+        while c.list().unwrap().len() < CHANNELS_PER_CONTROLLER as usize {
+            match it.next() {
+                Some(ch) => {
+                    controllers[i].join(ch);
+                }
+                None => break,
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use controller::test::*;
+
+    //convenience
+    impl ControllerGroup {
+    
+    fn init_test(
+        mut channels: Vec<String>,
+        channels_per_controller: u64,
+    ) -> ControllerGroup {
+        let chans_length = channels.len() as u64;
+        Self::init_inner(channels, chans_length, channels_per_controller, channel().0, |c, _| Box::new(TestController::init(c)))
+    }
+    }
 
     #[test]
     fn basic_test() {
@@ -147,14 +225,9 @@ mod test {
     }
 
     //TODO might be nice to have a property test here
-    fn assert_refresh_works(initial_channels: Vec<Vec<String>>, final_channels: Vec<Vec<String>>) {
-        let controllers: Vec<_> = initial_channels
-            .clone()
-            .into_iter()
-            .map(|v| TestController::init(v))
-            .collect();
-        refresh_channels_inner(&controllers, final_channels.concat());
-        let refresh_channels: Vec<String> = channel_list(&controllers);
+    fn assert_refresh_works(initial: ControllerGroup, final_channels: Vec<String>) {
+        refresh_channels_inner(&initial.controllers, final_channels.clone());
+        let refresh_channels: Vec<String> = initial.list_channels().into_iter().flatten().collect();
 
         let refresh_channels_set =
             HashSet::<String>::from_iter(refresh_channels.clone().into_iter());
@@ -164,7 +237,6 @@ mod test {
                 final_channels
                     .clone()
                     .into_iter()
-                    .flat_map(|v| v.into_iter())
             ),
             refresh_channels_set
         );
@@ -172,37 +244,33 @@ mod test {
 
     #[test]
     fn test_refresh_channels_no_op() {
-        let new_channels: Vec<Vec<_>> = (0..10).map(|i| vec![i.to_string()]).collect();
-        assert_refresh_works(new_channels.clone(), new_channels);
+        let new_channels: Vec<_> = (0..10).map(|i| i.to_string()).collect();
+        assert_refresh_works(ControllerGroup::init_test(new_channels.clone(), 2), new_channels);
     }
 
     #[test]
     fn test_refresh_channels_single_replacement() {
-        let channels: Vec<Vec<_>> = (0..100).map(|i| vec![i.to_string()]).collect();
+        let channels: Vec<_> = (0..100).map(|i| i.to_string()).collect();
         let mut new_channels = channels.clone();
         new_channels.pop();
-        new_channels.push(vec!["101".to_string()]);
+        new_channels.push("101".to_string());
         assert_eq!(channels.len(), new_channels.len());
-        assert_refresh_works(channels, new_channels);
+        assert_refresh_works(ControllerGroup::init_test(channels, 10), new_channels);
     }
 
     #[test]
     fn test_channels_replace_all() {
-        let channels: Vec<Vec<_>> = (0..100).map(|i| vec![i.to_string()]).collect();
-        let new_channels: Vec<Vec<_>> = (300..400).map(|i| vec![i.to_string()]).collect();
+        let channels: Vec<_> = (0..100).map(|i| i.to_string()).collect();
+        let new_channels: Vec<_> = (300..400).map(|i| i.to_string()).collect();
         assert_eq!(channels.len(), new_channels.len());
-        assert_refresh_works(channels, new_channels);
+        assert_refresh_works(ControllerGroup::init_test(channels, 10), new_channels);
     }
 
     #[test]
     fn simulate_api_issues_refresh() {
-        let channels: Vec<Vec<_>> = (0..100).map(|i| vec![i.to_string()]).collect();
+        let channels: Vec<_> = (0..100).map(|i| i.to_string()).collect();
+        let group = ControllerGroup::init_test(channels, 10);
         let new_channels: Vec<_> = (10..101).map(|i| i.to_string()).collect();
-        let controllers: Vec<_> = channels
-            .clone()
-            .into_iter()
-            .map(|v| TestController::init(v))
-            .collect();
-        refresh_channels_inner(&controllers, new_channels);
+        refresh_channels_inner(&group.controllers, new_channels);
     }
 }
