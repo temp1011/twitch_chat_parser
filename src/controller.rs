@@ -104,12 +104,10 @@ fn run_client_inner(chans: Vec<String>, send: Sender<TwitchMessage>) -> Controll
         reactor.run();
     });
 
-    let controller = Controller {
+    Controller {
         client: client,
         sender: send.clone(),
-    };
-
-    controller
+    }
 }
 
 fn setup_client(chans: Vec<String>) -> Result<IrcClient, IrcError> {

@@ -1,11 +1,16 @@
 # see https://whitfin.io/speeding-up-rust-docker-builds/
 
+FROM rust:latest as diesel-cli-build
+WORKDIR /diesel-cli-install
+RUN cargo install --root /diesel-cli-install diesel_cli --no-default-features --features sqlite
+RUN ls /
+RUN ls /diesel-cli-install
+
 FROM rust:1.41 as build
 
 RUN USER=root cargo new --bin twitch_project 
 WORKDIR /twitch_project
 
-RUN cargo install diesel_cli --no-default-features --features sqlite
 
 # Hacky: build deps first with empty project to improve caching
 COPY ./Cargo.lock ./Cargo.lock
@@ -20,7 +25,9 @@ COPY ./config.toml ./config.toml
 COPY ./diesel.toml ./diesel.toml
 COPY ./migrations/ ./migrations/
 
-RUN diesel setup
+COPY --from=diesel-cli-build /diesel-cli-install/bin/diesel /bin/diesel
+RUN /bin/diesel setup
+
 RUN rm ./target/release/deps/twitch_chat_parser*
 RUN cargo build --release
 
@@ -30,9 +37,5 @@ COPY --from=build /twitch_project/target/release/twitch_chat_parser .
 COPY --from=build /twitch_project/.env .
 COPY --from=build /twitch_project/config.toml .
 COPY --from=build /twitch_project/db.sqlite .
-#RUN apt-get update && apt-get install -y \
-#	libsqlite3-0 \
-#	libssl1.1 \
-#	openssl
 
 CMD ["./twitch_chat_parser"]

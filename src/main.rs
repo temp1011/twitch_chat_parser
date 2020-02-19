@@ -8,8 +8,8 @@ mod schema;
 use std::thread;
 use std::time::Duration;
 
-use std::env;
 use dotenv::dotenv;
+use std::env;
 
 mod types;
 use types::TwitchMessage;
@@ -32,8 +32,14 @@ use std::sync::mpsc::*;
 fn main() -> Result<(), error::MyError> {
     dotenv().ok();
     let max_channels = env::var("MAX_CHANNELS").unwrap().parse::<u64>().unwrap();
-    let channels_per_controller = env::var("CHANNELS_PER_CONTROLLER").unwrap().parse::<u64>().unwrap();
-    let refresh_interval = env::var("REFRESH_INTERVAL").unwrap().parse::<u64>().unwrap();
+    let channels_per_controller = env::var("CHANNELS_PER_CONTROLLER")
+        .unwrap()
+        .parse::<u64>()
+        .unwrap();
+    let refresh_interval = env::var("REFRESH_INTERVAL")
+        .unwrap()
+        .parse::<u64>()
+        .unwrap();
 
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
     let chans = cleanup_channels(channels::top_connections(max_channels), max_channels);
@@ -137,7 +143,10 @@ fn cleanup_channels(mut chans: Vec<String>, expected: u64) -> Vec<String> {
 }
 
 fn refresh_channels(controllers: &ControllerGroup) {
-    refresh_channels_inner(controllers, channels::top_connections(controllers.max_channels))
+    refresh_channels_inner(
+        controllers,
+        channels::top_connections(controllers.max_channels),
+    )
 }
 
 ///split out for testing purposes
