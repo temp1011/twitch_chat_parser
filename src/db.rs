@@ -86,6 +86,6 @@ impl DB {
 //TODO - is this correct?
 impl Drop for DB {
     fn drop(&mut self) {
-        self.flush(); //look at result here?
+        self.flush().unwrap(); //look at result here?
     }
 }

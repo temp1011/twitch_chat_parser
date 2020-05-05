@@ -1,17 +1,16 @@
 use std::convert::TryFrom;
-use std::str::FromStr;
-
-use irc::client::prelude::*;
-use irc::proto::message::Tag;
 
 use serde::{Deserialize, Serialize};
 
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 
 use crate::error::MyError;
 use std::time::{Duration, UNIX_EPOCH};
 
 use uuid::Uuid;
+
+use std::sync::Arc;
+use twitchchat::{messages::Privmsg, Tags};
 //https://dev.twitch.tv/docs/irc/tags/#privmsg-twitch-tags
 //deprecated tags not serialised
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -31,72 +30,48 @@ pub struct TwitchTags {
     pub user_id: String,
 }
 
-impl Default for TwitchTags {
-    fn default() -> Self {
-        TwitchTags {
-            badge_info: None,
-            badges: None,
-            bits: None,
-            color: None,
-            display_name: "".to_string(),
-            emotes: None,
-            id: Uuid::nil(),
-            moderator: None,
-            room_id: 0,
-            user_id: "".to_string(),
-            tmi_sent_ts: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-        }
-    }
-}
+//TODO recheck if there's any interesting fields to add to this
 
-impl TryFrom<Vec<Tag>> for TwitchTags {
+impl TryFrom<Tags<'_>> for TwitchTags {
     type Error = MyError;
-    //TODO - throw on more or maybe deserializer
-    fn try_from(tags: Vec<Tag>) -> Result<Self, Self::Error> {
-        let mut ret: TwitchTags = Default::default();
-        for t in tags.into_iter() {
-            let val = t.1.filter(|x| !x.is_empty());
-            match t.0.as_str() {
-                "badge-info" => ret.badge_info = val,
-                "badges" => ret.badges = val.map(|s| s.split(',').map(String::from).collect()),
-                "bits" => ret.bits = val.map(map_to_int),
-                "color" => ret.color = val,
-                "display-name" => {
-                    ret.display_name = val.ok_or(MyError::Parse("Display name not present"))?
-                }
-                "emotes" => ret.emotes = val.map(|s| s.split('/').map(String::from).collect()),
-                //TODO lose an opputunity to capture the parse error here.
-                "id" => {
-                    ret.id = val
-                        .as_ref()
-                        .and_then(|v| Uuid::parse_str(v).ok())
-                        .ok_or(MyError::Parse("message id not present"))?
-                }
-                "mod" => ret.moderator = val.map(map_to_int).map(|i| i != 0),
-                "room-id" => {
-                    ret.room_id = val
-                        .map(map_to_int)
-                        .ok_or(MyError::Parse("Room id not present"))?
-                }
-                "tmi-sent-ts" => {
-                    ret.tmi_sent_ts = val
-                        .ok_or(MyError::Parse("Timestamp not present"))?
-                        .parse::<u64>()
-                        .map_err(|_| MyError::Parse("timestamp wasn't a u64"))
-                        .map(|v| DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(v)))?
-                }
-                "user-id" => ret.user_id = val.ok_or(MyError::Parse("User id not present"))?,
-                _ => {}
-            }
-        }
-        Ok(ret)
+
+    //TODO errors as always
+    fn try_from(tags: Tags) -> Result<Self, Self::Error> {
+        //TODO can probably just use turbofish type for this instead of separate param
+        let badges: Option<String> = tags.get_parsed("badges");
+        let emotes: Option<String> = tags.get_parsed("emotes");
+        let uuidstr: Option<String> = tags.get_parsed("id");
+        let timestr: Option<String> = tags.get_parsed("tmi-sent-ts");
+        Ok(TwitchTags {
+            badge_info: tags.get_parsed("badge-info"),
+            badges: badges.map(|s| s.split(',').map(String::from).collect()),
+            bits: tags.get_parsed("bits"),
+            color: tags.get_parsed("color"), //https://en.wikipedia.org/wiki/Web_colors
+            display_name: tags
+                .get_parsed("display-name")
+                .ok_or(MyError::Parse("Display name not present"))?,
+            emotes: emotes.map(|s| s.split('/').map(String::from).collect()),
+            id: uuidstr
+                .as_ref()
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .ok_or(MyError::Parse("Message id not present"))?,
+            moderator: tags.get_parsed("mod"),
+            room_id: tags
+                .get_parsed("room-id")
+                .ok_or(MyError::Parse("room id not present"))?,
+            tmi_sent_ts: timestr
+                .ok_or(MyError::Parse("Timestamp not present"))?
+                .parse::<u64>()
+                .map_err(|_| MyError::Parse("timestamp wasn't a u64"))
+                .map(|v| DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(v)))?,
+            user_id: tags
+                .get_parsed("user-id")
+                .ok_or(MyError::Parse("User id not present"))?,
+        })
     }
 }
 
-fn map_to_int(s: String) -> i32 {
-    s.parse::<i32>().unwrap_or(0)
-}
-#[derive(Debug, Serialize, Deserialize, Default, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TwitchMessage {
     pub tags: TwitchTags,
     pub channel: String,
@@ -104,38 +79,17 @@ pub struct TwitchMessage {
     pub raw: String,
 }
 
-impl TryFrom<&Message> for TwitchMessage {
+impl TryFrom<Arc<Privmsg<'_>>> for TwitchMessage {
     type Error = MyError;
 
-    fn try_from(irc_msg: &Message) -> Result<Self, Self::Error> {
-        if let Command::PRIVMSG(ref target, ref msg) = irc_msg.command {
-            let orig = irc_msg.to_string();
-
-            //unwrap_or?
-            let tgs = match &irc_msg.tags {
-                Some(t) => TwitchTags::try_from(t.to_vec())?,
-                _ => return Err(MyError::Parse("no tags present in message")),
-            };
-
-            Ok(TwitchMessage {
-                tags: tgs,
-                channel: target.to_string(),
-                message: msg.to_string(),
-                raw: orig,
-            })
-        } else {
-            Err(MyError::Parse("Not a PRIVMSG"))
-        }
-    }
-}
-
-impl FromStr for TwitchMessage {
-    type Err = MyError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse::<Message>() {
-            Ok(msg) => TwitchMessage::try_from(&msg),
-            Err(e) => Err(MyError::Parse("could not be parsed to irc message")), //should pass actual type here
-        }
+    //TODO can get a lot of stuff from message directly may not need tags as much
+    fn try_from(msg: Arc<Privmsg>) -> Result<Self, Self::Error> {
+        let raw_msg: String = format!("{:?}", msg.clone());
+        Ok(TwitchMessage {
+            tags: TwitchTags::try_from(msg.tags.clone())?,
+            channel: msg.channel.to_string(),
+            message: msg.data.to_string(),
+            raw: raw_msg,
+        })
     }
 }
