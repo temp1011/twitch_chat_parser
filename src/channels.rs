@@ -73,6 +73,7 @@ const MAX_PER_PAGE: u64 = 100;
 //TODO- lazy reusable request builder for best performance
 //probably need to make this a struct for that
 trait Request {
+    //TODO once async methods allowed in traits make this async
     fn request(
         endpoint: &str,
         params: Vec<(&str, String)>,
@@ -81,7 +82,7 @@ trait Request {
         Self: std::marker::Sized + serde::de::DeserializeOwned,
     {
         let url = reqwest::Url::parse_with_params(&(API_URL.to_owned() + endpoint), &params)?;
-        let res = reqwest::Client::new()
+        let res = reqwest::blocking::Client::new()
             .get(&url.into_string())
             .header("Client-ID", CLIENT_ID)
             .send()?
