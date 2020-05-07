@@ -28,7 +28,9 @@ async fn main() {
                                 // .unwrap();
 
     let db_conn: Sender<TwitchMessage> = db::DB::connection().unwrap();
-    let chans = cleanup_channels(channels::top_connections(max_channels), max_channels);
+
+    let raw_channels = channels::top_connections(max_channels).await;
+    let chans = cleanup_channels(raw_channels, max_channels);
 
     //TODO refreshing/joining new channels
     twitchclient::get_messages(chans, db_conn).await;

@@ -1,3 +1,5 @@
+use futures::stream::{self, StreamExt};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -30,7 +32,7 @@ struct ChannelResponse {
 }
 
 impl ChannelResponse {
-    fn get(
+    async fn get(
         number: u64,
         pagination: Option<String>,
     ) -> Result<ChannelResponse, Box<dyn std::error::Error>> {
@@ -38,7 +40,7 @@ impl ChannelResponse {
         if let Some(page) = pagination {
             params.push(("after", page));
         }
-        Request::request("streams", params)
+        request("streams", params).await
     }
 }
 
@@ -47,22 +49,27 @@ struct ChannelPages {
     number: u64,
 }
 
-impl Iterator for ChannelPages {
-    type Item = ChannelResponse;
+async fn pages(channel_pages: ChannelPages) -> Option<(ChannelResponse, ChannelPages)> {
+    if channel_pages.number == 0 {
+        return None;
+    }
 
-    fn next(&mut self) -> Option<ChannelResponse> {
-        if self.number == 0 {
-            return None;
+    let to_get = std::cmp::min(MAX_PER_PAGE, channel_pages.number);
+
+    //TODO use overflowing sub here with MAX_PER_PAGE?
+    let new_to_get = channel_pages.number.saturating_sub(to_get);
+    match ChannelResponse::get(to_get, channel_pages.page).await {
+        Ok(r) => {
+            let curs = r.pagination.cursor.clone();
+            Some((
+                r,
+                ChannelPages {
+                    page: Some(curs),
+                    number: new_to_get,
+                },
+            ))
         }
-        let to_get = std::cmp::min(MAX_PER_PAGE, self.number);
-        self.number = self.number.saturating_sub(to_get);
-        match ChannelResponse::get(to_get, self.page.clone()) {
-            Ok(r) => {
-                self.page = Some(r.pagination.cursor.clone());
-                Some(r)
-            }
-            Err(_) => None,
-        }
+        Err(_) => None,
     }
 }
 
@@ -70,51 +77,46 @@ impl Iterator for ChannelPages {
 const CLIENT_ID: &str = "jzkbprff40iqj646a697cyrvl0zt2m6";
 const API_URL: &str = "https://api.twitch.tv/helix/";
 const MAX_PER_PAGE: u64 = 100;
-//TODO- lazy reusable request builder for best performance
-//probably need to make this a struct for that
-trait Request {
-    //TODO once async methods allowed in traits make this async
-    fn request(
-        endpoint: &str,
-        params: Vec<(&str, String)>,
-    ) -> Result<Self, Box<dyn std::error::Error>>
-    where
-        Self: std::marker::Sized + serde::de::DeserializeOwned,
-    {
-        let url = reqwest::Url::parse_with_params(&(API_URL.to_owned() + endpoint), &params)?;
-        let res = reqwest::blocking::Client::new()
-            .get(&url.into_string())
-            .header("Client-ID", CLIENT_ID)
-            .send()?
-            .json()?;
-        Ok(res)
-    }
+
+lazy_static! {
+    static ref CLIENT: reqwest::Client = {
+        let mut header_map = reqwest::header::HeaderMap::new();
+        header_map.insert("Client-ID", CLIENT_ID.parse().unwrap());
+
+        reqwest::Client::builder()
+            .default_headers(header_map)
+            .build()
+            .unwrap()
+    };
 }
 
-impl Request for ChannelResponse {}
+//TODO- lazy reusable request builder for best performance
+//probably need to make this a struct for that
+async fn request<T>(
+    endpoint: &str,
+    params: Vec<(&str, String)>,
+) -> Result<T, Box<dyn std::error::Error>>
+where
+    T: std::marker::Sized + serde::de::DeserializeOwned,
+{
+    let url = reqwest::Url::parse_with_params(&(API_URL.to_owned() + endpoint), &params)?;
+    let res = CLIENT.get(&url.into_string()).send().await?.json().await?;
+    Ok(res)
+}
 
-impl Request for UserResponse {}
-
-pub fn top_connections(number: u64) -> Vec<String> {
-    let mut logins: Vec<String> = Vec::with_capacity(number as usize);
-    for page in (ChannelPages { page: None, number }) {
-        let ids: Vec<String> = page.data.into_iter().map(|x| x.user_id).collect();
-        // The ChannelPages iterator already returns up to the max of this endpoint anyway so it's
-        // OK to keep this in the loop
-        // TODO but it shouldn't unwrap
-        let resp = UserResponse::get_login_names(ids).unwrap();
-        let mut l: Vec<String> = resp
-            .data
-            .into_iter()
-            .map(|mut u| {
-                u.login.insert_str(0, "#");
-                u.login
-            })
-            .collect();
-
-        logins.append(&mut l);
-    }
-    logins
+pub async fn top_connections(number: u64) -> Vec<String> {
+    stream::unfold(ChannelPages { page: None, number }, pages)
+        .then(|page| async move {
+            let ids: Vec<String> = page.data.into_iter().map(|x| x.user_id).collect();
+            // The ChannelPages iterator already returns up to the max of this endpoint anyway so it's
+            // OK to keep this in the loop
+            // TODO but it shouldn't unwrap
+            let resp = UserResponse::get_login_names(ids).await.unwrap();
+            stream::iter(resp.data.into_iter().map(|u| u.login))
+        })
+        .flatten()
+        .collect::<Vec<String>>()
+        .await
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -138,9 +140,11 @@ struct UserResponse {
 impl UserResponse {
     //TODO - Sometimes this seems to return fewer channels than requested. Maybe return an error
     //for this too
-    fn get_login_names(userids: Vec<String>) -> Result<UserResponse, Box<dyn std::error::Error>> {
+    async fn get_login_names(
+        userids: Vec<String>,
+    ) -> Result<UserResponse, Box<dyn std::error::Error>> {
         let params: Vec<(&str, String)> = userids.into_iter().map(|s| ("id", s)).collect();
-        Request::request("users", params)
+        request("users", params).await
     }
 }
 

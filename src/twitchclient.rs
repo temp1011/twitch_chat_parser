@@ -3,7 +3,9 @@ use std::convert::TryFrom;
 use std::sync::mpsc;
 use std::sync::Arc;
 use tokio::stream::StreamExt as _;
-use twitchchat::{events, messages, Dispatcher, IntoChannel, rate_limit::RateClass, RateLimit, Runner, Status};
+use twitchchat::{
+    events, messages, rate_limit::RateClass, Dispatcher, IntoChannel, RateLimit, Runner, Status,
+};
 use twitchchat::{Capability, EventStream, UserConfig};
 
 async fn setup(dispatcher: Dispatcher) -> EventStream<Arc<messages::Privmsg<'static>>> {
@@ -27,7 +29,8 @@ pub async fn get_messages(
     sender: mpsc::Sender<TwitchMessage>,
 ) {
     let dispatcher = Dispatcher::new();
-    let (runner, mut control) = Runner::new(dispatcher.clone(), RateLimit::from_class(RateClass::Known));
+    let (runner, mut control) =
+        Runner::new(dispatcher.clone(), RateLimit::from_class(RateClass::Known));
     let mut writer = control.writer().clone();
 
     let user_config = UserConfig::builder()

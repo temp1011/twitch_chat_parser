@@ -10,6 +10,8 @@ serde_json="1.0.39"
 chrono = {version = "0.4.6", features = ["serde"]}
 diesel = {version = "1.4.2", features = ["sqlite"]}
 dotenv = "0.13.0"
+futures = "0.3.4"
+lazy_static = "1.4.0"
 reqwest = {version = "0.10.4", features = ["blocking", "json"]}
 uuid = { version = "0.7", features = ["serde"] }
 twitchchat = "0.10.2"
